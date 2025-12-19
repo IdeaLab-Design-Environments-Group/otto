@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Otto - Parametric 2D Design System</title>
+    <link rel="stylesheet" href="./styles/main.css">
+</head>
+<body>
+    <!-- Tab Bar Container -->
+    <div id="tab-bar-container" class="tab-bar-container">
+        <!-- Toolbar buttons -->
+        <div class="toolbar-buttons">
+            <button id="btn-save" class="toolbar-btn" title="Save (Ctrl+S)">
+                Save
+            </button>
+            <button id="btn-load" class="toolbar-btn" title="Load">
+                Load
+            </button>
+            <button id="btn-export" class="toolbar-btn" title="Export File (Ctrl+O)">
+                Export
+            </button>
+            <button id="btn-import" class="toolbar-btn" title="Import File">
+                Import
+            </button>
+            <div class="toolbar-separator"></div>
+            <button id="btn-undo" class="toolbar-btn" title="Undo (Ctrl+Z)">
+                Undo
+            </button>
+            <button id="btn-redo" class="toolbar-btn" title="Redo (Ctrl+Y)">
+                Redo
+            </button>
+        </div>
+    </div>
+    
+    <!-- Main Layout -->
+    <div class="main-layout">
+        <!-- Left Panel -->
+        <div id="left-panel" class="panel left-panel">
+            <div class="panel-header">
+                <h3>Shape Library</h3>
+            </div>
+            <div id="shape-library-container" class="panel-content"></div>
+        </div>
+        
+        <!-- Center Canvas Area -->
+        <div id="canvas-container" class="canvas-container">
+            <canvas id="main-canvas"></canvas>
+            <!-- Zoom Controls -->
+            <div id="zoom-controls-container" class="zoom-controls-container"></div>
+        </div>
+        
+        <!-- Right Panel -->
+        <div id="right-panel" class="panel right-panel">
+            <div class="panel-header">
+                <h3>Properties</h3>
+            </div>
+            <div id="properties-panel-container" class="panel-content"></div>
+            
+            <div class="panel-header">
+                <h3>Parameters</h3>
+            </div>
+            <div id="parameters-menu-container" class="panel-content"></div>
+        </div>
+    </div>
+    
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>
