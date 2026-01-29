@@ -52,8 +52,8 @@ export class Application {
         const parametersMenuContainer = document.getElementById('parameters-menu-container');
         const propertiesPanelContainer = document.getElementById('properties-panel-container');
         const zoomControlsContainer = document.getElementById('zoom-controls-container');
-        
-        if (!tabBarContainer || !shapeLibraryContainer || !canvasElement || 
+
+        if (!tabBarContainer || !shapeLibraryContainer || !canvasElement ||
             !parametersMenuContainer || !propertiesPanelContainer || !zoomControlsContainer) {
             throw new Error('Required DOM elements not found');
         }
@@ -111,12 +111,12 @@ export class Application {
             this.currentSceneState.shapeStore,
             ShapeRegistry
         );
-        
+
         // Connect DragDropManager with CanvasRenderer
         this.dragDropManager.setScreenToWorldConverter((x, y) => {
             return this.canvasRenderer.screenToWorld(x, y);
         });
-        
+
         // Setup event listeners
         this.setupEventListeners();
         
@@ -450,7 +450,7 @@ export class Application {
                     if (this.zoomControls) {
                         this.zoomControls.updateZoomDisplay();
                     }
-                    
+
                     this.updateUndoRedoUI();
                     console.log('Undo successful');
                 }
@@ -496,7 +496,7 @@ export class Application {
                     if (this.zoomControls) {
                         this.zoomControls.updateZoomDisplay();
                     }
-                    
+
                     this.updateUndoRedoUI();
                     console.log('Redo successful');
                 }

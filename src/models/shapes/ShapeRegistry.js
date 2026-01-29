@@ -28,7 +28,7 @@ export class ShapeRegistry {
     // Initialize registry with default shapes
     static {
         // Register Circle
-        this.register('circle', 
+        this.register('circle',
             (id, position, options) => new Circle(
                 id,
                 position,
@@ -38,7 +38,7 @@ export class ShapeRegistry {
             ),
             Circle.fromJSON
         );
-        
+
         // Register Rectangle
         this.register('rectangle',
             (id, position, options) => new Rectangle(
@@ -135,17 +135,17 @@ export class ShapeRegistry {
     
     /**
      * Create shape from JSON (Registry Pattern - no switch statement!)
-     * @param {Object} json 
+     * @param {Object} json
      * @returns {Shape}
      */
     static fromJSON(json) {
         if (!json || !json.type) {
             throw new Error('Invalid shape JSON: type is required');
         }
-        
+
         const normalizedType = json.type.toLowerCase();
         const entry = this.#registry.get(normalizedType);
-        
+
         if (!entry) {
             const available = Array.from(this.#registry.keys()).join(', ');
             throw new Error(
@@ -153,10 +153,10 @@ export class ShapeRegistry {
                 `Available types: ${available}.`
             );
         }
-        
+
         // Use registered fromJSON method
         const shape = entry.fromJSON(json);
-        
+
         // Restore bindings (common for all shapes)
         if (json.bindings) {
             Object.keys(json.bindings).forEach(property => {
@@ -168,7 +168,7 @@ export class ShapeRegistry {
                 }
             });
         }
-        
+
         return shape;
     }
     

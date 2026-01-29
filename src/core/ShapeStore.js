@@ -224,7 +224,7 @@ export class ShapeStore {
         const allIds = Array.from(this.shapes.keys());
         this.setSelectedIds(allIds);
     }
-    
+
     /**
      * Serialize to JSON
      * @returns {Object}
