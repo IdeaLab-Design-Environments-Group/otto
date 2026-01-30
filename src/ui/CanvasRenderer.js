@@ -17,6 +17,10 @@ export class CanvasRenderer extends Component {
         this.bindingResolver = bindingResolver;
         this.viewport = sceneState.viewport;
         
+        // Store CSS dimensions for proper rendering
+        this.cssWidth = 0;
+        this.cssHeight = 0;
+        
         // Interaction state
         this.isDragging = false;
         this.dragStart = null;
@@ -130,19 +134,48 @@ export class CanvasRenderer extends Component {
         // Handle window resize
         window.addEventListener('resize', () => {
             this.resizeCanvas();
-            this.render();
         });
+        
+        // Use ResizeObserver to watch for container size changes (including panel resizes)
+        if (window.ResizeObserver) {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.resizeCanvas();
+            });
+            this.resizeObserver.observe(this.canvas.parentElement);
+        }
         
         this.resizeCanvas();
     }
     
     /**
      * Resize canvas to fill container
+     * Maintains proper aspect ratio and device pixel ratio
      */
     resizeCanvas() {
         const rect = this.canvas.getBoundingClientRect();
-        this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Store CSS dimensions for use in rendering
+        this.cssWidth = rect.width;
+        this.cssHeight = rect.height;
+        
+        // Set display size (CSS pixels)
+        this.canvas.style.width = `${this.cssWidth}px`;
+        this.canvas.style.height = `${this.cssHeight}px`;
+        
+        // Set internal size (actual pixels) accounting for device pixel ratio
+        const newWidth = this.cssWidth * dpr;
+        const newHeight = this.cssHeight * dpr;
+        
+        // Only resize if dimensions actually changed
+        if (this.canvas.width !== newWidth || this.canvas.height !== newHeight) {
+            this.canvas.width = newWidth;
+            this.canvas.height = newHeight;
+            
+            // Setting canvas width/height resets the context, so we need to reapply DPR scaling
+            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        
         this.render();
     }
     
@@ -152,18 +185,20 @@ export class CanvasRenderer extends Component {
     render() {
         if (!this.ctx) return;
         
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Clear canvas using CSS pixel dimensions (DPR is already applied to context)
+        const width = this.cssWidth || this.canvas.width / (window.devicePixelRatio || 1);
+        const height = this.cssHeight || this.canvas.height / (window.devicePixelRatio || 1);
+        this.ctx.clearRect(0, 0, width, height);
         
-        // Apply viewport transformation
-        this.ctx.save();
-        this.ctx.translate(this.viewport.x, this.viewport.y);
-        this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
-        
-        // Render grid
+        // Render grid in screen space (before viewport transform)
         if (this.showGrid) {
             this.renderGrid();
         }
+        
+        // Apply viewport transformation (device pixel ratio already applied in resizeCanvas)
+        this.ctx.save();
+        this.ctx.translate(this.viewport.x, this.viewport.y);
+        this.ctx.scale(this.viewport.zoom, this.viewport.zoom);
         
         // Render shapes
         this.renderShapes();
@@ -206,31 +241,54 @@ export class CanvasRenderer extends Component {
     }
     
     /**
-     * Render grid
+     * Render grid in screen space (constant visual size regardless of zoom)
+     * Always covers the full canvas area from (0,0) to (width, height)
      */
     renderGrid() {
-        const gridSize = this.gridSize * this.viewport.zoom;
-        const offsetX = this.viewport.x % gridSize;
-        const offsetY = this.viewport.y % gridSize;
-        
+        // Use base grid size (no zoom multiplication) for constant visual size
+        const gridSize = this.gridSize;
+        const dpr = window.devicePixelRatio || 1;
+
+        // Use CSS dimensions for grid rendering
+        const width = this.cssWidth || this.canvas.width / dpr;
+        const height = this.cssHeight || this.canvas.height / dpr;
+
+        this.ctx.save();
+        // Reset transform but apply DPR scaling for crisp rendering
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
         this.ctx.strokeStyle = '#e0e0e0';
         this.ctx.lineWidth = 0.5;
-        
-        // Vertical lines
-        for (let x = -offsetX; x < this.canvas.width; x += gridSize) {
+
+        // Calculate grid offset based on viewport pan (for visual alignment)
+        const offsetX = this.viewport.x % gridSize;
+        const offsetY = this.viewport.y % gridSize;
+
+        // Normalize offsets to be within [0, gridSize) range
+        const normalizedOffsetX = offsetX < 0 ? offsetX + gridSize : offsetX;
+        const normalizedOffsetY = offsetY < 0 ? offsetY + gridSize : offsetY;
+
+        // Start from the first grid line that's at or before the canvas edge
+        const startX = normalizedOffsetX - gridSize;
+        const startY = normalizedOffsetY - gridSize;
+
+        // Draw vertical lines - always cover full canvas height (0 to height)
+        for (let x = startX; x <= width + gridSize; x += gridSize) {
             this.ctx.beginPath();
             this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.lineTo(x, height);
             this.ctx.stroke();
         }
-        
-        // Horizontal lines
-        for (let y = -offsetY; y < this.canvas.height; y += gridSize) {
+
+        // Draw horizontal lines - always cover full canvas width (0 to width)
+        for (let y = startY; y <= height + gridSize; y += gridSize) {
             this.ctx.beginPath();
             this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.lineTo(width, y);
             this.ctx.stroke();
         }
+
+        this.ctx.restore();
     }
     
     /**

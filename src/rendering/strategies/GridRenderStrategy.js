@@ -31,9 +31,10 @@ export class GridRenderStrategy {
      * @param {number} canvasHeight - Canvas height in pixels
      */
     render(context, viewport, canvasWidth, canvasHeight) {
-        const scaledGridSize = this.gridSize * viewport.zoom;
-        const offsetX = viewport.x % scaledGridSize;
-        const offsetY = viewport.y % scaledGridSize;
+        // Use base grid size (no zoom multiplication) for constant visual size
+        const gridSize = this.gridSize;
+        const offsetX = viewport.x % gridSize;
+        const offsetY = viewport.y % gridSize;
 
         context.save();
 
@@ -44,13 +45,21 @@ export class GridRenderStrategy {
         context.setStrokeStyle(this.lineColor);
         context.setLineWidth(this.lineWidth);
 
-        // Calculate starting grid line index for major line detection
-        const startIndexX = Math.floor(-viewport.x / scaledGridSize);
-        const startIndexY = Math.floor(-viewport.y / scaledGridSize);
+        // Calculate starting positions to ensure full coverage
+        const startX = offsetX < 0 ? offsetX : offsetX - gridSize;
+        const startY = offsetY < 0 ? offsetY : offsetY - gridSize;
+        
+        // Extend beyond canvas bounds to ensure full coverage
+        const endX = canvasWidth + gridSize;
+        const endY = canvasHeight + gridSize;
 
-        // Vertical lines
+        // Calculate starting grid line index for major line detection
+        const startIndexX = Math.floor((startX - offsetX) / gridSize) + Math.floor(-viewport.x / gridSize);
+        const startIndexY = Math.floor((startY - offsetY) / gridSize) + Math.floor(-viewport.y / gridSize);
+
+        // Vertical lines - cover full height
         let gridIndex = startIndexX;
-        for (let x = offsetX; x < canvasWidth; x += scaledGridSize) {
+        for (let x = startX; x <= endX; x += gridSize) {
             if (!this.showMajorLines || gridIndex % this.majorLineInterval !== 0) {
                 context.beginPath();
                 context.moveTo(x, 0);
@@ -60,9 +69,9 @@ export class GridRenderStrategy {
             gridIndex++;
         }
 
-        // Horizontal lines
+        // Horizontal lines - cover full width
         gridIndex = startIndexY;
-        for (let y = offsetY; y < canvasHeight; y += scaledGridSize) {
+        for (let y = startY; y <= endY; y += gridSize) {
             if (!this.showMajorLines || gridIndex % this.majorLineInterval !== 0) {
                 context.beginPath();
                 context.moveTo(0, y);
@@ -77,9 +86,9 @@ export class GridRenderStrategy {
             context.setStrokeStyle(this.majorLineColor);
             context.setLineWidth(this.lineWidth * 2);
 
-            // Vertical major lines
+            // Vertical major lines - cover full height
             gridIndex = startIndexX;
-            for (let x = offsetX; x < canvasWidth; x += scaledGridSize) {
+            for (let x = startX; x <= endX; x += gridSize) {
                 if (gridIndex % this.majorLineInterval === 0) {
                     context.beginPath();
                     context.moveTo(x, 0);
@@ -89,9 +98,9 @@ export class GridRenderStrategy {
                 gridIndex++;
             }
 
-            // Horizontal major lines
+            // Horizontal major lines - cover full width
             gridIndex = startIndexY;
-            for (let y = offsetY; y < canvasHeight; y += scaledGridSize) {
+            for (let y = startY; y <= endY; y += gridSize) {
                 if (gridIndex % this.majorLineInterval === 0) {
                     context.beginPath();
                     context.moveTo(0, y);
@@ -130,18 +139,27 @@ export class DotGridRenderStrategy extends GridRenderStrategy {
     }
 
     render(context, viewport, canvasWidth, canvasHeight) {
-        const scaledGridSize = this.gridSize * viewport.zoom;
-        const offsetX = viewport.x % scaledGridSize;
-        const offsetY = viewport.y % scaledGridSize;
+        // Use base grid size (no zoom multiplication) for constant visual size
+        const gridSize = this.gridSize;
+        const offsetX = viewport.x % gridSize;
+        const offsetY = viewport.y % gridSize;
 
         context.save();
         context.resetTransform();
 
         context.setFillStyle(this.dotColor);
 
-        // Draw dots at grid intersections
-        for (let x = offsetX; x < canvasWidth; x += scaledGridSize) {
-            for (let y = offsetY; y < canvasHeight; y += scaledGridSize) {
+        // Calculate starting positions to ensure full coverage
+        const startX = offsetX < 0 ? offsetX : offsetX - gridSize;
+        const startY = offsetY < 0 ? offsetY : offsetY - gridSize;
+        
+        // Extend beyond canvas bounds to ensure full coverage
+        const endX = canvasWidth + gridSize;
+        const endY = canvasHeight + gridSize;
+
+        // Draw dots at grid intersections - cover full screen
+        for (let x = startX; x <= endX; x += gridSize) {
+            for (let y = startY; y <= endY; y += gridSize) {
                 context.beginPath();
                 context.arc(x, y, this.dotRadius, 0, Math.PI * 2);
                 context.fill();

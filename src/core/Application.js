@@ -10,6 +10,7 @@ import { ParametersMenu } from '../ui/ParametersMenu.js';
 import { PropertiesPanel } from '../ui/PropertiesPanel.js';
 import { TabBar } from '../ui/TabBar.js';
 import { ZoomControls } from '../ui/ZoomControls.js';
+import { PanelResizer } from '../ui/PanelResizer.js';
 import { DragDropManager } from './DragDropManager.js';
 import { Serializer } from '../persistence/Serializer.js';
 import { StorageManager } from '../persistence/StorageManager.js';
@@ -115,6 +116,18 @@ export class Application {
         // Connect DragDropManager with CanvasRenderer
         this.dragDropManager.setScreenToWorldConverter((x, y) => {
             return this.canvasRenderer.screenToWorld(x, y);
+        });
+
+        // Initialize Panel Resizer
+        this.panelResizer = new PanelResizer();
+        // Connect panel resizer to canvas renderer
+        this.panelResizer.setOnResizeCallback(() => {
+            if (this.canvasRenderer) {
+                // Use requestAnimationFrame to ensure resize happens after layout
+                requestAnimationFrame(() => {
+                    this.canvasRenderer.resizeCanvas();
+                });
+            }
         });
 
         // Setup event listeners

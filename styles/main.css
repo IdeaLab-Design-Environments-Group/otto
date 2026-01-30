@@ -13,8 +13,8 @@
     /* Module colors */
     --module-name: rgb(255, 89, 191);
     --module-name-hover: rgb(255, 120, 200);
-    --module-ctrl: rgb(200, 200, 200);
-    --module-interface: rgb(240, 240, 240);
+    --module-ctrl: rgb(200, 220, 255);
+    --module-interface: rgb(245, 250, 255);
     --module-input: rgb(255, 225, 54);
     --module-output: rgb(255, 163, 25);
 
@@ -52,8 +52,8 @@ body.dark-theme {
 
 hr {
     height: 2px;
-    color: #ddd;
-    background-color: #ddd;
+    color: rgb(200, 220, 255);
+    background-color: rgb(200, 220, 255);
     border-width: 0;
 }
 
@@ -65,27 +65,27 @@ button {
     cursor: pointer;
     text-align: center;
     color: #fff;
-    background-color: #b3b3b3;
+    background-color: rgb(180, 200, 255);
     border: none;
     border-radius: 4px;
-    box-shadow: 0 4px #999;
+    box-shadow: 0 4px rgb(140, 170, 240);
     margin-bottom: 4px;
 }
 
 button:hover {
-    background-color: #7d7d7d;
-    box-shadow: 0 4px #666;
+    background-color: rgb(150, 180, 240);
+    box-shadow: 0 4px rgb(110, 150, 220);
 }
 
 button:active {
-    background-color: #7d7d7d;
-    box-shadow: 0 2px #666;
+    background-color: rgb(150, 180, 240);
+    box-shadow: 0 2px rgb(110, 150, 220);
     transform: translateY(2px);
 }
 
 button:disabled {
-    background-color: #ccc;
-    box-shadow: 0 4px #bbb;
+    background-color: rgb(220, 230, 250);
+    box-shadow: 0 4px rgb(200, 210, 240);
     cursor: not-allowed;
 }
 
@@ -93,7 +93,7 @@ button:disabled {
 input {
     font-family: inherit;
     font-size: 1em;
-    border: 1px solid #bbb;
+    border: 1px solid rgb(200, 220, 255);
     padding: 4px;
     margin: 2px;
 }
@@ -114,7 +114,7 @@ input[type=radio] {
     top: 4px;
     height: 15px;
     width: 15px;
-    background-color: #bbb;
+    background-color: rgb(200, 220, 255);
     border: 0;
     border-radius: 50%;
 }
@@ -136,7 +136,7 @@ select {
     padding: 4px;
     padding-right: 1.1em;
     margin: 2px;
-    border: 1px solid #bbb;
+    border: 1px solid rgb(200, 220, 255);
     box-shadow: none;
     background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Ctitle%3Edown-arrow%3C%2Ftitle%3E%3Cg%20fill%3D%22%23000000%22%3E%3Cpath%20d%3D%22M10.293%2C3.293%2C6%2C7.586%2C1.707%2C3.293A1%2C1%2C0%2C0%2C0%2C.293%2C4.707l5%2C5a1%2C1%2C0%2C0%2C0%2C1.414%2C0l5-5a1%2C1%2C0%2C1%2C0-1.414-1.414Z%22%20fill%3D%22%23000000%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fsvg%3E");
     background-size: .6em auto, 100%;
@@ -173,7 +173,7 @@ select:focus {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    background-color: rgb(220, 230, 250);
     transition: .4s;
 }
 
@@ -244,7 +244,7 @@ input:checked + .slider:before {
 .toolbar-separator {
     width: 1px;
     height: 24px;
-    background: #999;
+    background: rgb(180, 200, 255);
     margin: 0 8px;
 }
 
@@ -261,13 +261,13 @@ input:checked + .slider:before {
     display: inline-flex;
     align-items: center;
     padding: 5px 12px;
-    background: #eee;
+    background: rgb(245, 250, 255);
     border: none;
     color: var(--text-primary);
     font-family: monospace;
     font-size: 13px;
     cursor: pointer;
-    box-shadow: 0 3px #ccc;
+    box-shadow: 0 3px rgb(220, 230, 250);
 }
 
 .tab-item:hover {
@@ -324,12 +324,18 @@ input:checked + .slider:before {
 }
 
 .left-panel {
+    min-width: 120px;
+    max-width: 50%;
     width: 180px;
+    flex-shrink: 0;
     border-right: 2px solid var(--module-ctrl);
 }
 
 .right-panel {
+    min-width: 150px;
+    max-width: 50%;
     width: 260px;
+    flex-shrink: 0;
     border-left: 2px solid var(--module-ctrl);
 }
 
@@ -358,6 +364,7 @@ input:checked + .slider:before {
 
 .canvas-container {
     flex: 1;
+    min-width: 200px;
     position: relative;
     overflow: hidden;
     background: var(--bg-primary);
@@ -374,10 +381,13 @@ body.dark-theme .canvas-container {
 }
 
 #main-canvas {
+    display: block;
     width: 100%;
     height: 100%;
     cursor: crosshair;
     background: transparent;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
 }
 
 /* ========================================
@@ -543,7 +553,7 @@ body.dark-theme .canvas-container {
     display: block;
     padding: 4px;
     background: var(--module-interface);
-    border: 1px solid #ccc;
+    border: 1px solid rgb(200, 220, 255);
     font-size: 11px;
 }
 
@@ -633,4 +643,30 @@ body.dark-theme .canvas-container {
 
 .notification-error {
     border-left: 4px solid #ff4444;
+}
+
+/* ========================================
+   Resize Handles
+   ======================================== */
+
+.resize-handle {
+    background: var(--module-ctrl);
+    cursor: col-resize;
+    user-select: none;
+    position: relative;
+    z-index: 10;
+}
+
+.resize-handle-vertical {
+    width: 4px;
+    min-width: 4px;
+    flex-shrink: 0;
+}
+
+.resize-handle:hover {
+    background: var(--menu-bg);
+}
+
+.resize-handle.active {
+    background: var(--menu-bg);
 }
