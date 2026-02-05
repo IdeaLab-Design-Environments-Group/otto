@@ -23,11 +23,10 @@ Otto is a parametric 2D design system running entirely in the browser:
 - **Undo/Redo** (memento snapshots) + **autosave** to localStorage.
 - **Import/Export** scene data as `.pds` files.
 - **Multi-tab scenes** (each tab has its own independent scene state).
-- Optional advanced systems:
-  - **Edge selection + joinery metadata** (for fabrication workflows).
-  - **Programming language**: code editor runner + interpreter (and blocks editor sync).
-  - **3D assembly view**: extrude 2D parts into meshes (Three.js).
-  - **Plugin system**: load and activate plugins that register shapes/bindings/commands.
+- **Edge selection + joinery metadata** (for fabrication workflows): Select individual edges of shapes and attach joinery metadata (finger joints, dovetails, etc.) for CNC/fabrication workflows.
+- **Programming language**: Code editor runner + interpreter (and blocks editor sync) for generating parameters and shapes programmatically.
+- **3D assembly view**: Extrude 2D parts into 3D meshes (Three.js) with perfect SVG-to-3D transfer, preserving smooth curves and exact geometry.
+- **Plugin system**: Load and activate plugins that register new shapes, bindings, and commands to extend the system.
 
 ---
 
@@ -133,10 +132,10 @@ Build in this order. Don’t skip verification.
 8. **M7**: Undo/Redo (mementos) + Command pattern for moves/duplicates
 9. **M8**: Persistence (Serializer + StorageManager + FileManager) + import/export `.pds`
 10. **M9**: Multi-tab scenes (TabManager + TabBar) and scene switching
-11. **M10** (optional): Edge selection + joinery metadata + joinery UI
-12. **M11** (optional): Programming language (Lexer/Parser/Interpreter + CodeRunner) + CodeEditor/BlocksEditor sync
-13. **M12** (optional): 3D assembly view (Three.js extrude + layout + drag/orbit)
-14. **M13** (optional): Plugins (PluginManager + PluginAPI) + example plugin
+11. **M10**: Edge selection + joinery metadata + joinery UI (fabrication workflows)
+12. **M11**: Programming language (Lexer/Parser/Interpreter + CodeRunner) + CodeEditor/BlocksEditor sync
+13. **M12**: 3D assembly view (Three.js extrude + layout + drag/orbit with universal SVG-to-3D converter)
+14. **M13**: Plugins (PluginManager + PluginAPI) + example plugin
 
 ---
 
@@ -601,99 +600,496 @@ Multiple independent scenes; switching tabs swaps scene state everywhere.
 
 ---
 
-## M10 — Edge selection + joinery (optional fabrication feature)
+## M10 — Edge selection + joinery (fabrication workflows)
 
 ### Goal
 
-Select individual edges of shapes and attach joinery metadata (finger joints etc).
+Enable fabrication workflows by allowing users to select individual edges of shapes and attach joinery metadata (finger joints, dovetails, etc.). This is essential for CNC routing, laser cutting, and other fabrication processes where parts need to connect together.
+
+### Why This Is Required
+
+Without edge joinery, Otto is just a drawing tool. With joinery, it becomes a fabrication design system where:
+- Users can design parts that physically connect
+- The 3D assembly view can show how parts fit together
+- Export formats can include joinery information for CAM software
+- The system supports real-world manufacturing workflows
 
 ### Deliverables
 
 - `src/geometry/edge/` helpers:
-  - hit testing (`EdgeHitTester`)
-  - selection bookkeeping (`EdgeSelection`)
-  - overlay rendering (hover/selected visuals)
+  - `EdgeHitTester.js`: Hit testing for individual edges of shapes
+    - Enumerates edges from geometry paths
+    - Tests point-in-edge proximity
+    - Returns edge identifiers (shapeId + edgeIndex)
+  - `EdgeSelection.js`: Selection bookkeeping
+    - Tracks selected edges per shape
+    - Manages selection mode (`'shape' | 'edge'`)
+    - Emits selection change events
+  - `EdgeRenderer.js`: Overlay rendering for hover/selected visuals
+    - Draws edge highlights on canvas
+    - Shows joinery indicators
 - Extend `ShapeStore` to:
   - maintain selection mode: `'shape' | 'edge'`
-  - persist `edgeJoinery` map across save/load
-- `src/ui/EdgeJoineryMenu.js` + renderer overlays
+  - persist `edgeJoinery` map: `Map<edgeId, JoineryMetadata>` across save/load
+  - emit events when joinery is added/removed
+- `src/ui/EdgeJoineryMenu.js`: Context menu for edge joinery
+  - Shows when an edge is selected
+  - Allows selecting joinery type (finger joint, dovetail, etc.)
+  - Configures joinery parameters (finger count, thickness, etc.)
+- `src/core/JoineryMetadata.js`: Data structure for joinery
+  - Type: `'finger_male' | 'finger_female' | 'dovetail_male' | 'dovetail_female' | ...`
+  - Parameters: `fingerCount`, `thicknessMm`, `depthMm`, etc.
+
+### Implementation Details
+
+**Edge Enumeration:**
+1. For each shape, get its geometry path via `toGeometryPath()`
+2. Iterate path anchors to create edge segments
+3. Each edge is identified by `(shapeId, anchorIndex1, anchorIndex2)`
+4. Store edges in a spatial index for fast hit testing
+
+**Hit Testing:**
+- Convert mouse position to world coordinates
+- Test proximity to each edge segment (within threshold, e.g., 10px)
+- Return closest edge if within threshold
+
+**Joinery Metadata:**
+- Stored per edge in `ShapeStore.edgeJoinery` map
+- Key format: `${shapeId}_${edgeIndex}`
+- Value: `{ type, fingerCount, thicknessMm, depthMm, ... }`
+- Serialized in scene JSON for persistence
+
+**Visual Feedback:**
+- Hover: Highlight edge in blue
+- Selected: Highlight edge in yellow
+- With joinery: Show joinery icon/indicator on edge
 
 ### Verification
 
-- Toggle to edge mode
+- Toggle to edge mode (button in toolbar or keyboard shortcut)
 - Hover an edge and see highlight
-- Select an edge and assign joinery
-- Save/load preserves joinery data
+- Click to select an edge
+- Right-click or use menu to assign joinery type
+- Configure joinery parameters (finger count, thickness)
+- Save scene and reload: joinery data persists
+- Switch to assembly view: joinery appears in 3D (male tabs, female holes)
+
+### Troubleshooting
+
+- **Edges not detecting**: Check edge hit test threshold (may be too small)
+- **Joinery not showing in 3D**: Verify `AssemblyPieceFactory` reads joinery metadata
+- **Selection mode not switching**: Check `ShapeStore.selectionMode` is being updated
 
 ---
 
-## M11 — Programming language + editors (optional)
+## M11 — Programming language + editors (programmatic design)
 
 ### Goal
 
-Support generating parameters and shapes from code (and optionally blocks).
+Enable programmatic design by supporting a text-based programming language that can generate parameters and shapes from code. This allows users to create parametric designs algorithmically, generate patterns, iterate on designs, and create reusable design templates.
+
+### Why This Is Required
+
+The programming language is essential for:
+- **Parametric design**: Create designs that respond to variables and calculations
+- **Pattern generation**: Generate arrays, grids, and complex patterns programmatically
+- **Design iteration**: Quickly test variations by changing code
+- **Reusability**: Share design code as templates
+- **Educational value**: Teach programming through design
+- **Advanced workflows**: Complex designs that would be tedious to create manually
 
 ### Deliverables
 
 - `src/programming/`:
-  - `Lexer.js`, `Parser.js`, `Interpreter.js` (Visitor-based)
-  - `CodeRunner.js` bridges interpreter output → ShapeStore/ParameterStore
-- `src/ui/CodeEditor.js` (CodeMirror) that calls CodeRunner
-- `src/ui/BlocksEditor.js` (Blockly) that can also produce shapes/params
-- `src/ui/EditorSyncConnector.js` (Mediator to prevent loops)
+  - `Lexer.js`: Tokenizes source code into tokens
+    - Keywords: `let`, `const`, `function`, `if`, `for`, `return`, etc.
+    - Operators: `+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.
+    - Literals: numbers, strings
+    - Identifiers: variable/function names
+  - `Parser.js`: Parses tokens into Abstract Syntax Tree (AST)
+    - Expression parsing (arithmetic, function calls, member access)
+    - Statement parsing (variable declarations, assignments, conditionals, loops)
+    - Function definition parsing
+    - Error reporting with line numbers
+  - `Interpreter.js`: Executes AST (Visitor pattern)
+    - Variable scope management (global + function scopes)
+    - Expression evaluation
+    - Statement execution
+    - Built-in functions: `circle()`, `rectangle()`, `parameter()`, `sin()`, `cos()`, etc.
+  - `CodeRunner.js`: Bridges interpreter output → ShapeStore/ParameterStore
+    - Executes code in isolated context
+    - Creates/updates parameters from `parameter()` calls
+    - Creates/updates shapes from shape constructor calls
+    - Handles errors gracefully (logs, doesn't crash app)
+- `src/ui/CodeEditor.js`: Code editor UI (CodeMirror integration)
+  - Syntax highlighting
+  - Line numbers
+  - Error markers
+  - Run button
+  - Auto-format (optional)
+- `src/ui/BlocksEditor.js`: Visual blocks editor (Blockly integration)
+  - Drag-and-drop blocks for visual programming
+  - Generates code from blocks
+  - Syncs with code editor (bidirectional)
+- `src/ui/EditorSyncConnector.js`: Mediator to prevent sync loops
+  - Tracks which editor last changed
+  - Prevents infinite sync between code and blocks editors
+  - Debounces sync operations
+
+### Language Features
+
+**Basic Syntax:**
+```javascript
+// Variables
+let width = 50;
+let height = width * 2;
+
+// Parameters
+parameter("size", 10, 100, 50);
+
+// Shapes
+circle(0, 0, size);
+rectangle(-width/2, -height/2, width, height);
+
+// Functions
+function makeGrid(count) {
+  for (let i = 0; i < count; i++) {
+    circle(i * 20, 0, 5);
+  }
+}
+```
+
+**Built-in Functions:**
+- Shape constructors: `circle(x, y, r)`, `rectangle(x, y, w, h)`, `polygon(x, y, r, sides)`, etc.
+- Parameter creation: `parameter(name, min, max, value)`
+- Math: `sin()`, `cos()`, `tan()`, `sqrt()`, `abs()`, `min()`, `max()`, `random()`
+- Utility: `map(value, inMin, inMax, outMin, outMax)`
+
+### Implementation Details
+
+**Lexer:**
+- Reads source code character by character
+- Identifies tokens using regex patterns
+- Handles whitespace, comments, string literals
+- Returns array of tokens with type and value
+
+**Parser:**
+- Recursive descent parser
+- Builds AST nodes (Expression, Statement, etc.)
+- Handles operator precedence
+- Reports syntax errors with position
+
+**Interpreter:**
+- Visitor pattern: each AST node type has a visit method
+- Maintains execution context (variables, functions)
+- Evaluates expressions bottom-up
+- Executes statements sequentially
+- Returns last expression value (if any)
+
+**CodeRunner Integration:**
+- Creates a new interpreter instance per run
+- Registers built-in functions that interact with ShapeStore/ParameterStore
+- On `parameter()` call: creates/updates parameter in ParameterStore
+- On shape constructor call: creates/updates shape in ShapeStore
+- Clears previous run's shapes (or merges, depending on strategy)
 
 ### Verification
 
-- Write code that defines a parameter and a circle using it
-- Run code → parameter appears + shape appears
-- Re-run code with a different value → parameter updates
+- Write code that defines a parameter: `parameter("radius", 5, 50, 20)`
+- Run code → parameter appears in ParametersMenu
+- Write code that creates a circle: `circle(0, 0, radius)`
+- Run code → circle appears on canvas
+- Change parameter value in UI → circle updates (binding works)
+- Re-run code with different value: `parameter("radius", 5, 50, 30)`
+- Parameter updates, circle updates
+- Write a loop to create multiple shapes
+- Run code → multiple shapes appear
+- Switch between code editor and blocks editor
+- Changes sync correctly (no infinite loops)
 
 ### Safety note
 
-This is **not** a hardened sandbox. Treat it as a learning/prototyping feature.
+This is **not** a hardened sandbox. The interpreter runs in the same context as the app. Treat it as a learning/prototyping feature. For production use, consider:
+- Sandboxing with Web Workers
+- Whitelisting allowed functions
+- Timeout mechanisms
+- Resource limits
 
 ---
 
-## M12 — 3D Assembly view (optional)
+## M12 — 3D Assembly view (fabrication visualization)
 
 ### Goal
 
-Extrude 2D shapes into 3D meshes and lay them out on a plane.
+Extrude 2D shapes into 3D meshes and lay them out on a plane for visualization and fabrication planning. **Perfect transfer** from 2D SVG definitions to 3D extrusions, preserving exact geometry including smooth curves.
+
+### Why This Is Required
+
+The 3D assembly view is essential for:
+- **Visualization**: See how 2D parts will look as 3D objects
+- **Fabrication planning**: Understand part relationships before cutting
+- **Joinery verification**: See how parts with joinery fit together
+- **Layout optimization**: Arrange parts efficiently on material sheets
+- **Export preparation**: Verify geometry before sending to CAM software
+- **Design validation**: Catch design issues before fabrication
 
 ### Deliverables
 
-- `assemble.html` with a Three.js importmap
+- `assemble.html`: Standalone page with Three.js importmap
+  - Imports Three.js via ES modules
+  - Initializes AssemblyApp
+  - Provides canvas for 3D rendering
 - `src/assembly/`:
-  - `AssemblyDataLoader.js` loads autosave JSON
-  - `AssemblyPieceFactory.js` converts 2D shape paths → `THREE.Shape` → extrude
-  - `AssemblyLayout.js` positions pieces
-  - `AssemblyInteraction.js` orbit + drag
+  - `AssemblyDataLoader.js`: Loads autosave JSON from localStorage
+    - Reads `nova_otto_autosave` key
+    - Extracts active tab's scene data
+    - Normalizes shape data (adds defaults for missing properties)
+    - Returns scene state for assembly
+  - `AssemblyPieceFactory.js`: Core factory for 3D mesh creation
+    - **Universal converter** (`shapeToThreeShape()`):
+      - Uses each shape's `toGeometryPath()` to get exact SVG path definition
+      - Extracts geometry path anchors with Bezier handles (handleIn/handleOut as Vec objects)
+      - Converts anchors to THREE.js Shape commands:
+        - If handles are non-zero → `bezierCurveTo(cp1, cp2, end)` for smooth curves
+        - Otherwise → `lineTo(end)` for straight segments
+      - Automatically centers shapes based on bounding box for proper 3D positioning
+      - Closes open paths for extrusion (required for 3D)
+      - Returns THREE.js Shape ready for extrusion
+    - `buildGeometry()`: Extrudes shapes with thickness
+      - Creates THREE.ExtrudeGeometry from THREE.js Shape
+      - Applies thickness (default 3mm)
+      - Rotates geometry for proper orientation (X-axis rotation)
+      - Handles special cases (rectangles with joinery, donut holes)
+    - `createPiece()`: Creates complete 3D mesh
+      - Builds geometry
+      - Creates material (wood-like color, roughness, metalness)
+      - Adds outline edges for visual clarity
+      - Sets up shadow casting/receiving
+  - `AssemblyScene.js` / `AssemblySceneBuilder.js`: Builds Three.js scene
+    - Creates scene, camera, lights (ambient + directional)
+    - Creates desktop plane with wood texture
+    - Sets up shadows
+    - Returns configured scene for rendering
+  - `AssemblyLayout.js`: Positions pieces on plane
+    - `GridLayoutStrategy`: Lays out pieces in grid with spacing
+    - Centers layout around origin
+    - Prevents overlaps
+    - Returns positioned meshes
+  - `AssemblyInteraction.js`: User interaction
+    - `OrbitControls`: Camera orbit/pan/zoom
+    - `DragControls`: Drag pieces on plane
+    - Constrains dragging to plane surface
+  - `AssemblyJoinery.js`: Joinery visualization
+    - Reads joinery metadata from shapes
+    - Creates male tabs as separate meshes
+    - Creates female holes in extruded geometry
+    - Visualizes joinery relationships
+  - `main.js`: Entry point for assembly app
+    - Initializes AssemblyApp
+    - Sets up render loop
+    - Handles window resize
+
+### Key Implementation Details
+
+**Universal SVG-to-3D Conversion Process:**
+1. **Get geometry path**: `const geoPath = shape.toGeometryPath()`
+   - Every shape implements this method
+   - Returns geometry library Path object with anchors
+2. **Extract anchors**: `geoPath.anchors` array
+   - Each anchor has `position` (Vec), `handleIn` (Vec), `handleOut` (Vec)
+   - Handles are relative to position (Vec objects with .x and .y)
+3. **Calculate bounding box**: Get bounds to center shape
+   - `geoPath.tightBoundingBox()` or `geoPath.looseBoundingBox()`
+   - Calculate center: `(min + max) / 2`
+4. **Convert to THREE.js Shape**:
+   - Start: `shape2d.moveTo(firstAnchor.position - center)`
+   - For each segment:
+     - Check if handles are non-zero
+     - If yes: `bezierCurveTo(cp1, cp2, end)` where:
+       - `cp1 = anchor1.position + anchor1.handleOut - center`
+       - `cp2 = anchor2.position + anchor2.handleIn - center`
+       - `end = anchor2.position - center`
+     - If no: `lineTo(anchor2.position - center)`
+5. **Close path**: If closed or needs closing for extrusion
+   - Add final segment back to first anchor
+   - Call `shape2d.closePath()`
+6. **Extrude**: `new THREE.ExtrudeGeometry(shape2d, { depth: thickness })`
+   - Rotate: `geometry.rotateX(-Math.PI / 2)` for proper orientation
+
+**Special Cases:**
+- **Rectangles with joinery**: Custom edge notches (bypasses universal converter)
+  - Uses `rectShapeWithJoinery()` to create notched edges
+  - Handles finger joints, dovetails, etc.
+- **Donut shapes**: Explicit holes (THREE.js doesn't support winding-rule holes)
+  - Uses `donutShape()` to create outer circle with inner hole
+  - THREE.js requires explicit Path holes, not winding-rule
+
+**Joinery Integration:**
+- Female holes: Created in extruded geometry via `addFemaleJoineryHoles()`
+- Male tabs: Created as separate meshes via `AssemblyJoineryDecorator`
+- Edge metadata: Read from `ShapeStore.edgeJoinery` map
 
 ### Verification
 
-- Create shapes in editor (so autosave exists)
-- Open assembly page
-- See extruded pieces, drag them around
+- Create shapes in editor (including paths with Bezier curves)
+- Add joinery to edges (finger joints, etc.)
+- Open assembly page (`assemble.html`)
+- See extruded pieces with **smooth curves preserved**
+- Verify joinery appears correctly (male tabs, female holes)
+- Drag pieces around on the plane
+- Orbit camera to view from different angles
+- Verify complex paths (gears, spirals, custom paths) extrude correctly
+- Check that all shape types work (circle, rectangle, polygon, path, etc.)
+- Verify thickness is applied correctly (default 3mm)
+- Test with multiple pieces: layout should be organized
 
 ---
 
-## M13 — Plugins (optional)
+## M13 — Plugins (extensibility system)
 
 ### Goal
 
-Load external modules that can register new shapes/bindings/commands.
+Enable extensibility by allowing external modules (plugins) to register new shapes, bindings, commands, and UI components. This makes Otto a platform that can be extended without modifying core code.
+
+### Why This Is Required
+
+The plugin system is essential for:
+- **Extensibility**: Add new features without modifying core code
+- **Custom shapes**: Users can create domain-specific shapes
+- **Custom bindings**: Support new binding strategies
+- **Workflow integration**: Connect Otto to external tools
+- **Community contributions**: Allow others to extend the system
+- **Modularity**: Keep core system lean, add features via plugins
+- **Experimental features**: Test new ideas without cluttering core
 
 ### Deliverables
 
-- `src/plugins/Plugin.js` base class (id, dependencies, activate/deactivate)
-- `src/plugins/PluginAPI.js` (Facade) exposing stable methods
-- `src/plugins/PluginManager.js` for lifecycle (load/activate/deactivate)
-- At least one example plugin in `examples/plugins/`
+- `src/plugins/Plugin.js`: Base class for all plugins
+  - Properties: `id` (unique identifier), `name`, `version`, `dependencies`
+  - Methods: `activate(api)`, `deactivate()`
+  - Lifecycle hooks: `onActivate()`, `onDeactivate()`
+  - Error handling: Graceful activation/deactivation
+- `src/plugins/PluginAPI.js`: Facade exposing stable API
+  - **Shape registration**: `registerShape(type, createFn, fromJSONFn)`
+  - **Binding registration**: `registerBinding(type, createFn, resolveFn)`
+  - **Command registration**: `registerCommand(name, executeFn, undoFn)`
+  - **UI component registration**: `registerUIComponent(name, componentClass)`
+  - **Event subscription**: `subscribe(eventType, callback)`
+  - **Event emission**: `emit(eventType, payload)`
+  - **Store access**: `getShapeStore()`, `getParameterStore()`, etc.
+  - **Version checking**: Ensure plugin compatibility
+- `src/plugins/PluginManager.js`: Manages plugin lifecycle
+  - `loadPlugin(url)`: Dynamic import of plugin module
+  - `activatePlugin(pluginId)`: Activates plugin (calls `activate(api)`)
+  - `deactivatePlugin(pluginId)`: Deactivates plugin (calls `deactivate()`)
+  - `getPlugin(pluginId)`: Retrieves loaded plugin
+  - `listPlugins()`: Returns all loaded plugins
+  - Dependency resolution: Ensures dependencies are loaded first
+  - Error handling: Logs errors, prevents one plugin from breaking others
+- `src/plugins/PluginLoader.js`: Handles plugin discovery and loading
+  - Scans `examples/plugins/` directory (or configured path)
+  - Loads plugin manifests
+  - Validates plugin structure
+  - Handles version conflicts
+- `examples/plugins/`: Example plugins
+  - `TriangleShapePlugin.js`: Example shape plugin
+    - Registers Triangle shape type
+    - Implements create/fromJSON methods
+    - Shows plugin structure
+  - `CustomBindingPlugin.js`: Example binding plugin (optional)
+  - `ExampleCommandPlugin.js`: Example command plugin (optional)
+
+### Plugin Structure
+
+**Basic Plugin Example:**
+```javascript
+import { Plugin } from '../../src/plugins/Plugin.js';
+
+export class TriangleShapePlugin extends Plugin {
+  constructor() {
+    super('triangle-shape', 'Triangle Shape', '1.0.0', []);
+  }
+
+  activate(api) {
+    // Register shape
+    api.registerShape('triangle', 
+      (id, position, base, height) => new Triangle(id, position, base, height),
+      (json) => Triangle.fromJSON(json)
+    );
+    
+    // Subscribe to events
+    api.subscribe('shape:created', (shape) => {
+      if (shape.type === 'triangle') {
+        console.log('Triangle created!');
+      }
+    });
+  }
+
+  deactivate() {
+    // Cleanup if needed
+  }
+}
+```
+
+**Plugin Manifest (optional):**
+```json
+{
+  "id": "triangle-shape",
+  "name": "Triangle Shape",
+  "version": "1.0.0",
+  "main": "TriangleShapePlugin.js",
+  "dependencies": []
+}
+```
+
+### Implementation Details
+
+**Plugin Loading:**
+1. User triggers plugin load (UI button, config file, etc.)
+2. `PluginLoader` performs dynamic import: `import(pluginUrl)`
+3. Plugin module exports a class extending `Plugin`
+4. `PluginManager` instantiates plugin
+5. Checks dependencies are loaded
+6. Calls `plugin.activate(api)`
+
+**Plugin Activation:**
+1. Create `PluginAPI` instance with current system state
+2. Pass API to `plugin.activate(api)`
+3. Plugin registers shapes/bindings/commands via API
+4. Plugin subscribes to events if needed
+5. Plugin is marked as active
+
+**Plugin Deactivation:**
+1. Call `plugin.deactivate()`
+2. Plugin unregisters its contributions
+3. Clean up event subscriptions
+4. Plugin is marked as inactive
+
+**Error Handling:**
+- Plugin load failures don't crash the app
+- Activation failures are logged
+- One plugin's errors don't affect others
+- Graceful degradation if plugin is incompatible
+
+**API Stability:**
+- `PluginAPI` provides stable interface
+- Internal changes don't break plugins
+- Version checking ensures compatibility
+- Deprecated methods are marked but still work
 
 ### Verification
 
-- Load plugin via dynamic import
-- Plugin registers a new shape type and it appears in the library
+- Create example plugin in `examples/plugins/TriangleShapePlugin.js`
+- Load plugin via `PluginManager.loadPlugin()`
+- Activate plugin via `PluginManager.activatePlugin()`
+- Verify new shape type appears in ShapeLibrary
+- Create shape using new type
+- Verify shape serializes/deserializes correctly
+- Deactivate plugin
+- Verify shape type is removed (or marked unavailable)
+- Test dependency resolution (plugin A depends on plugin B)
+- Test error handling (plugin with syntax error doesn't crash app)
+- Test multiple plugins loading simultaneously
 
 ---
 
@@ -709,13 +1105,16 @@ This is the “wiring diagram” you should replicate:
   - constructs TabManager
   - gets the active SceneState
   - constructs UI components:
-    - TabBar
-    - ShapeLibrary
-    - CanvasRenderer
-    - ParametersMenu
-    - PropertiesPanel
-    - ZoomControls
-    - BlocksEditor / CodeEditor (optional)
+    - TabBar (multi-tab support)
+    - ShapeLibrary (shape palette)
+    - CanvasRenderer (rendering + interaction)
+    - ParametersMenu (parameter CRUD)
+    - PropertiesPanel (shape property editing + binding)
+    - ZoomControls (viewport controls)
+    - EdgeJoineryMenu (joinery assignment, M10)
+    - CodeEditor (programming language, M11)
+    - BlocksEditor (visual programming, M11)
+    - EditorSyncConnector (syncs code/blocks editors, M11)
   - constructs persistence:
     - StorageManager (autosave)
     - FileManager (import/export)
@@ -779,8 +1178,13 @@ There is no Jest/Vitest runner. Tests are written as ES module files and execute
 - [ ] Autosave restores after refresh
 - [ ] Export/import `.pds` round-trips state
 - [ ] Tabs create/switch/close correctly (last tab cannot close)
-- [ ] (Optional) edge selection + joinery persists
-- [ ] (Optional) code runner creates shapes/params
-- [ ] (Optional) assembly view extrudes shapes
-- [ ] (Optional) plugins can register new shapes/bindings
+- [ ] Edge selection + joinery persists across save/load
+- [ ] Code runner creates shapes/params programmatically
+- [ ] Assembly view extrudes shapes with smooth curves preserved (universal SVG-to-3D converter)
+- [ ] Plugins can register new shapes/bindings/commands
+- [ ] All shape types work in assembly view (circle, rectangle, polygon, path with curves, etc.)
+- [ ] Joinery appears correctly in 3D (male tabs, female holes)
+- [ ] Programming language supports loops, conditionals, and functions
+- [ ] Code editor and blocks editor sync bidirectionally
+- [ ] Plugin system loads and activates plugins without errors
 

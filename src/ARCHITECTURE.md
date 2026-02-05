@@ -1543,7 +1543,11 @@ flowchart LR
 
 ### Runtime Steps (V1)
 1. `AssemblyApp` loads autosave and builds `SceneState`.
-2. `AssemblyPieceFactory` extrudes each shape with **female holes**.
+2. `AssemblyPieceFactory` uses **universal SVG-to-3D converter**:
+   - Gets geometry path via `shape.toGeometryPath()`
+   - Converts anchors with Bezier handles to THREE.js Shape
+   - Preserves smooth curves and exact geometry
+   - Extrudes each shape with **female holes** (if joinery exists)
 3. `AssemblyJoineryDecorator` adds **male tabs** on top of the piece mesh.
 4. `GridLayoutStrategy` positions pieces on the plane.
 5. `AssemblyInteraction` enables orbit and drag controls.
@@ -1556,8 +1560,9 @@ flowchart LR
 
 ### Limitations (V1)
 - Joinery cutouts are only applied for **closed shapes**.
-- Open paths fallback to bounding boxes.
+- Open paths are automatically closed for extrusion (may not match intended design).
 - No boolean CSG for male tabs (tabs are added as separate meshes).
+- Donut shapes use explicit holes (winding-rule holes not supported by THREE.js).
 
 ---
 
@@ -1582,9 +1587,14 @@ flowchart LR
 - Normalizes missing properties with defaults.
 
 #### AssemblyPieceFactory (Factory)
-- Converts shape data into 2D shapes, then extrudes into 3D.
-- Supports: rectangle, circle, polygon, star, line, path (closed), triangle, ellipse, donut, roundedRectangle, chamferRectangle, arc, cross, slot, arrow, and other shapes via `toGeometryPath()`.
-- Other shapes fall back to bounding boxes.
+- **Universal SVG-to-3D converter**: Uses each shape's `toGeometryPath()` method to get the exact SVG path definition, then converts it directly to THREE.js Shape for perfect 2D-to-3D transfer.
+- Converts geometry path anchors (with Bezier curve handles) to THREE.js Shape commands, preserving smooth curves.
+- Automatically centers shapes for proper 3D positioning.
+- Supports all shapes that implement `toGeometryPath()`: rectangle, circle, polygon, star, line, path (with curves), triangle, ellipse, donut, roundedRectangle, chamferRectangle, arc, cross, slot, arrow, gear, spiral, wave, and any custom shapes.
+- Special handling:
+  - Rectangles with joinery use custom edge notches.
+  - Donut shapes use explicit holes (THREE.js doesn't support winding-rule holes).
+- Open paths are automatically closed for 3D extrusion.
 
 #### GridLayoutStrategy (Strategy)
 - Lays out pieces in a grid with consistent spacing.
@@ -1599,11 +1609,26 @@ flowchart LR
 - Creates male tabs as separate meshes.
 - Creates female holes in extruded geometry.
 
+### Universal SVG-to-3D Conversion
+
+The `AssemblyPieceFactory` implements a universal converter (`shapeToThreeShape()`) that:
+
+1. **Gets the geometry path** from any shape via `toGeometryPath()` method
+2. **Extracts path anchors** with their Bezier curve handles (handleIn/handleOut)
+3. **Converts to THREE.js Shape** by:
+   - Centering the shape based on bounding box
+   - Converting each segment (line or Bezier curve) to THREE.js commands
+   - Preserving smooth curves via `bezierCurveTo()` with proper control points
+   - Closing open paths for 3D extrusion
+4. **Extrudes** the resulting shape with specified thickness
+
+This ensures **perfect transfer** from 2D SVG definitions to 3D extrusions, maintaining exact geometry including curves, corners, and complex paths.
+
 ### Future Expansion
-- True geometry conversion for complex paths.
-- Real joinery-cut geometry in 3D.
-- Export assembly layouts.
+- Real joinery-cut geometry in 3D (currently tabs are separate meshes).
+- Export assembly layouts to STL/OBJ formats.
 - Boolean CSG for male tabs integration.
+- Support for multi-path shapes with holes (beyond Donut).
 
 ---
 

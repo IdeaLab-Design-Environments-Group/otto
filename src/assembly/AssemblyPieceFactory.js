@@ -8,6 +8,138 @@ export class AssemblyPieceFactory {
         this.colorIndex = 0;
     }
 
+    /**
+     * Universal converter: converts any shape's geometry path to a THREE.js Shape.
+     * This ensures perfect transfer from 2D SVG definitions to 3D extrusions.
+     * 
+     * @param {Object} shape - The shape object (must have toGeometryPath() method)
+     * @param {Object} options - Options for conversion
+     * @returns {{shape2d: THREE.Shape, width: number, height: number, center: {x: number, y: number}}}
+     */
+    shapeToThreeShape(shape, options = {}) {
+        // Get the geometry path from the shape
+        if (typeof shape.toGeometryPath !== 'function') {
+            console.warn(`Shape ${shape.type || 'unknown'} does not have toGeometryPath() method`);
+            return { shape2d: this.rectShape(40, 40), width: 40, height: 40, center: { x: 0, y: 0 } };
+        }
+
+        try {
+            const geoPath = shape.toGeometryPath();
+            if (!geoPath || !geoPath.anchors || geoPath.anchors.length === 0) {
+                console.warn(`Shape ${shape.type || 'unknown'} produced empty geometry path`);
+                return { shape2d: this.rectShape(40, 40), width: 40, height: 40, center: { x: 0, y: 0 } };
+            }
+
+            // Get bounds to center the shape
+            const bounds = geoPath.tightBoundingBox() || geoPath.looseBoundingBox();
+            if (!bounds) {
+                return { shape2d: this.rectShape(40, 40), width: 40, height: 40, center: { x: 0, y: 0 } };
+            }
+
+            const width = bounds.width();
+            const height = bounds.height();
+            const center = {
+                x: (bounds.min.x + bounds.max.x) / 2,
+                y: (bounds.min.y + bounds.max.y) / 2
+            };
+
+            // Create THREE.js Shape from geometry path anchors
+            const shape2d = new THREE.Shape();
+            const anchors = geoPath.anchors;
+            const isClosed = geoPath.closed;
+
+            if (anchors.length === 0) {
+                return { shape2d: this.rectShape(width, height), width, height, center };
+            }
+
+            // Start with first anchor (centered)
+            const firstAnchor = anchors[0];
+            const startX = firstAnchor.position.x - center.x;
+            const startY = firstAnchor.position.y - center.y;
+            shape2d.moveTo(startX, startY);
+
+            // Convert each segment
+            for (let i = 1; i < anchors.length; i++) {
+                const a1 = anchors[i - 1];
+                const a2 = anchors[i];
+                this.addSegmentToShape(shape2d, a1, a2, center);
+            }
+
+            // Close the path if it's closed, or if we need to close it for extrusion
+            if (isClosed && anchors.length > 2) {
+                // Close back to first anchor
+                const lastAnchor = anchors[anchors.length - 1];
+                this.addSegmentToShape(shape2d, lastAnchor, anchors[0], center);
+                shape2d.closePath();
+            } else if (!isClosed && anchors.length > 1) {
+                // For open paths, close them for 3D extrusion
+                const lastAnchor = anchors[anchors.length - 1];
+                this.addSegmentToShape(shape2d, lastAnchor, anchors[0], center);
+                shape2d.closePath();
+            }
+
+            // Handle holes (for shapes like Donut)
+            // Note: The geometry library's Path doesn't directly expose holes,
+            // but shapes like Donut might have multiple paths. We'd need to check
+            // if the shape has multiple paths and convert them as holes.
+            // For now, we'll handle this in the specific shape cases if needed.
+
+            return { shape2d, width, height, center };
+        } catch (e) {
+            console.warn(`Failed to convert shape ${shape.type || 'unknown'} to THREE.js Shape:`, e);
+            const bounds = shape.getBounds ? shape.getBounds() : { width: 40, height: 40 };
+            return {
+                shape2d: this.rectShape(bounds.width || 40, bounds.height || 40),
+                width: bounds.width || 40,
+                height: bounds.height || 40,
+                center: { x: 0, y: 0 }
+            };
+        }
+    }
+
+    /**
+     * Add a segment (line or bezier curve) to a THREE.js Shape.
+     * 
+     * @param {THREE.Shape} shape2d - The THREE.js Shape to add to
+     * @param {Object} a1 - First anchor (with position Vec, handleOut Vec)
+     * @param {Object} a2 - Second anchor (with position Vec, handleIn Vec)
+     * @param {Object} center - Center point to offset coordinates
+     */
+    addSegmentToShape(shape2d, a1, a2, center) {
+        // Check if handles are non-zero Vec objects
+        // Handles are Vec objects with .x and .y properties (relative to position)
+        const handleOutX = (a1.handleOut && typeof a1.handleOut.x === 'number') ? a1.handleOut.x : 0;
+        const handleOutY = (a1.handleOut && typeof a1.handleOut.y === 'number') ? a1.handleOut.y : 0;
+        const handleInX = (a2.handleIn && typeof a2.handleIn.x === 'number') ? a2.handleIn.x : 0;
+        const handleInY = (a2.handleIn && typeof a2.handleIn.y === 'number') ? a2.handleIn.y : 0;
+        
+        const hasHandleOut = handleOutX !== 0 || handleOutY !== 0;
+        const hasHandleIn = handleInX !== 0 || handleInY !== 0;
+        const hasHandles = hasHandleOut || hasHandleIn;
+
+        if (hasHandles) {
+            // Bezier curve: handles are relative to anchor position
+            // Control point 1: position + handleOut (from first anchor)
+            const cp1x = a1.position.x + handleOutX - center.x;
+            const cp1y = a1.position.y + handleOutY - center.y;
+            
+            // Control point 2: position + handleIn (from second anchor)
+            const cp2x = a2.position.x + handleInX - center.x;
+            const cp2y = a2.position.y + handleInY - center.y;
+            
+            // End point: second anchor position
+            const endX = a2.position.x - center.x;
+            const endY = a2.position.y - center.y;
+            
+            shape2d.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
+        } else {
+            // Straight line
+            const x = a2.position.x - center.x;
+            const y = a2.position.y - center.y;
+            shape2d.lineTo(x, y);
+        }
+    }
+
     createPiece(shape, options = {}) {
         if (!shape) return null;
 
@@ -45,186 +177,52 @@ export class AssemblyPieceFactory {
 
     buildGeometry(shape, options = {}) {
         const thickness = this.thickness;
-        let shape2d = null;
-        let width = 40;
-        let height = 40;
         let skipFemaleHoles = false;
 
+        // Special handling for rectangles with joinery (needs custom edge notches)
         if (shape.type === 'rectangle') {
-            width = shape.width;
-            height = shape.height;
             const joineryBySide = this.getRectangleJoinery(shape, options);
             if (joineryBySide) {
-                shape2d = this.rectShapeWithJoinery(width, height, shape, joineryBySide);
+                const width = shape.width;
+                const height = shape.height;
+                const shape2d = this.rectShapeWithJoinery(width, height, shape, joineryBySide);
                 skipFemaleHoles = true;
-            } else {
-                shape2d = this.rectShape(width, height);
-            }
-        } else if (shape.type === 'circle') {
-            const radius = shape.radius;
-            width = radius * 2;
-            height = radius * 2;
-            shape2d = new THREE.Shape();
-            shape2d.absarc(0, 0, radius, 0, Math.PI * 2, false);
-        } else if (shape.type === 'polygon') {
-            const radius = shape.radius;
-            const sides = Math.max(3, Math.floor(shape.sides || 3));
-            width = radius * 2;
-            height = radius * 2;
-            shape2d = this.polygonShape(radius, sides);
-        } else if (shape.type === 'triangle') {
-            // Triangle shape: uses base and height properties
-            const base = shape.base || 30;
-            const triangleHeight = shape.height || 40;
-            width = base;
-            height = triangleHeight;
-            shape2d = this.triangleShape(base, triangleHeight);
-        } else if (shape.type === 'star') {
-            const outer = shape.outerRadius;
-            const inner = shape.innerRadius;
-            const points = Math.max(3, Math.floor(shape.points || 5));
-            width = outer * 2;
-            height = outer * 2;
-            shape2d = this.starShape(outer, inner, points);
-        } else if (shape.type === 'line') {
-            const dx = shape.x2 - shape.x1;
-            const dy = shape.y2 - shape.y1;
-            const length = Math.max(1, Math.hypot(dx, dy));
-            width = length;
-            height = Math.max(2, thickness / 2);
-            shape2d = this.rectShape(width, height);
-        } else if (shape.type === 'path' && Array.isArray(shape.points) && shape.points.length > 2 && shape.closed) {
-            const bounds = this.pointsBounds(shape.points);
-            width = bounds.width;
-            height = bounds.height;
-            shape2d = this.pointsShape(shape.points, bounds.center);
-        } else if (shape.type === 'path' && Array.isArray(shape.points) && shape.points.length > 1) {
-            const bounds = this.pointsBounds(shape.points);
-            width = bounds.width;
-            height = bounds.height;
-            shape2d = this.rectShape(width, height);
-        } else if (shape.type === 'ellipse') {
-            // Ellipse: use radiusX and radiusY
-            const radiusX = shape.radiusX || 30;
-            const radiusY = shape.radiusY || 20;
-            width = radiusX * 2;
-            height = radiusY * 2;
-            shape2d = this.ellipseShape(radiusX, radiusY);
-        } else if (shape.type === 'donut') {
-            // Donut (annulus): outer and inner radius
-            const outerRadius = shape.outerRadius || 25;
-            const innerRadius = shape.innerRadius || 12.5;
-            width = outerRadius * 2;
-            height = outerRadius * 2;
-            shape2d = this.donutShape(outerRadius, innerRadius);
-        } else if (shape.type === 'roundedRectangle' || shape.type === 'roundedrectangle') {
-            // Rounded rectangle: width, height, cornerRadius
-            width = shape.width || 50;
-            height = shape.height || 50;
-            const cornerRadius = shape.cornerRadius || 5;
-            shape2d = this.roundedRectShape(width, height, cornerRadius);
-        } else if (shape.type === 'chamferRectangle' || shape.type === 'chamferrectangle') {
-            // Chamfer rectangle: width, height, chamfer
-            width = shape.width || 50;
-            height = shape.height || 50;
-            const chamfer = shape.chamfer || 5;
-            shape2d = this.chamferRectShape(width, height, chamfer);
-        } else if (shape.type === 'arc') {
-            // Arc: radius, startAngle, endAngle (convert to closed pie slice for 3D)
-            const radius = shape.radius || 25;
-            const startAngle = (shape.startAngle || 0) * Math.PI / 180;
-            const endAngle = (shape.endAngle || 90) * Math.PI / 180;
-            width = radius * 2;
-            height = radius * 2;
-            shape2d = this.arcShape(radius, startAngle, endAngle);
-        } else if (shape.type === 'cross') {
-            // Cross: width and thickness
-            const crossWidth = shape.width || 50;
-            const thickness = shape.thickness || 10;
-            width = crossWidth;
-            height = crossWidth;
-            shape2d = this.crossShape(crossWidth, thickness);
-        } else if (shape.type === 'slot') {
-            // Slot (stadium/obround): length and width
-            const length = shape.length || 50;
-            const slotWidth = shape.slotWidth || shape.width || 15;
-            width = length;
-            height = slotWidth;
-            shape2d = this.slotShape(length, slotWidth);
-        } else if (shape.type === 'arrow') {
-            // Arrow: length, headWidth, headLength
-            const length = shape.length || 50;
-            const headWidth = shape.headWidth || 15;
-            const headLength = shape.headLength || 12.5;
-            width = length;
-            height = Math.max(headWidth, 5);
-            shape2d = this.arrowShape(length, headWidth, headLength);
-        } else if (shape.type === 'gear' || shape.type === 'spiral' || shape.type === 'wave') {
-            // Complex shapes: use toGeometryPath if available, otherwise fallback to bounds
-            if (typeof shape.toGeometryPath === 'function') {
-                try {
-                    const path = shape.toGeometryPath();
-                    // Path has anchors, each with a position property
-                    if (path && path.anchors && path.anchors.length > 0) {
-                        const points = path.anchors.map(anchor => ({
-                            x: anchor.position ? anchor.position.x : anchor.x || 0,
-                            y: anchor.position ? anchor.position.y : anchor.y || 0
-                        }));
-                        const bounds = this.pointsBounds(points);
-                        width = bounds.width;
-                        height = bounds.height;
-                        shape2d = this.pointsShape(points, bounds.center);
-                    } else {
-                        // Fallback to bounds-based rectangle
-                        const bounds = shape.getBounds ? shape.getBounds() : { width: 40, height: 40 };
-                        width = bounds.width || 40;
-                        height = bounds.height || 40;
-                        shape2d = this.rectShape(width, height);
-                    }
-                } catch (e) {
-                    console.warn('Failed to convert shape to geometry path:', e);
-                    const bounds = shape.getBounds ? shape.getBounds() : { width: 40, height: 40 };
-                    width = bounds.width || 40;
-                    height = bounds.height || 40;
-                    shape2d = this.rectShape(width, height);
-                }
-            } else {
-                // Fallback to bounds-based rectangle
-                const bounds = shape.getBounds ? shape.getBounds() : { width: 40, height: 40 };
-                width = bounds.width || 40;
-                height = bounds.height || 40;
-                shape2d = this.rectShape(width, height);
-            }
-        } else {
-            // Unknown shape type: try to use toGeometryPath if available
-            if (typeof shape.toGeometryPath === 'function') {
-                try {
-                    const path = shape.toGeometryPath();
-                    // Path has anchors, each with a position property
-                    if (path && path.anchors && path.anchors.length > 0) {
-                        const points = path.anchors.map(anchor => ({
-                            x: anchor.position ? anchor.position.x : anchor.x || 0,
-                            y: anchor.position ? anchor.position.y : anchor.y || 0
-                        }));
-                        const bounds = this.pointsBounds(points);
-                        width = bounds.width;
-                        height = bounds.height;
-                        shape2d = this.pointsShape(points, bounds.center);
-                    } else {
-                        shape2d = this.rectShape(width, height);
-                    }
-                } catch (e) {
-                    console.warn(`Unknown shape type "${shape.type}", using default rectangle`);
-                    shape2d = this.rectShape(width, height);
-                }
-            } else {
-                console.warn(`Unknown shape type "${shape.type}", using default rectangle`);
-                shape2d = this.rectShape(width, height);
+                
+                const geometry = new THREE.ExtrudeGeometry(shape2d, {
+                    depth: thickness,
+                    bevelEnabled: false
+                });
+                geometry.rotateX(-Math.PI / 2);
+                return { geometry, width, height };
             }
         }
 
+        // Universal converter: use the shape's SVG path definition for all shapes
+        // Special handling for Donut: it uses winding-rule holes which THREE.js doesn't support directly
+        // So we'll use the existing donutShape method which creates explicit holes
+        if (shape.type === 'donut') {
+            const outerRadius = shape.outerRadius || 25;
+            const innerRadius = shape.innerRadius || 12.5;
+            const donutShape2d = this.donutShape(outerRadius, innerRadius);
+            
+            if (!skipFemaleHoles) {
+                this.addFemaleJoineryHoles(donutShape2d, shape, options);
+            }
+
+            const geometry = new THREE.ExtrudeGeometry(donutShape2d, {
+                depth: thickness,
+                bevelEnabled: false
+            });
+            geometry.rotateX(-Math.PI / 2);
+            return { geometry, width: outerRadius * 2, height: outerRadius * 2 };
+        }
+
+        // For all other shapes, use the universal converter
+        const { shape2d, width, height, center } = this.shapeToThreeShape(shape, options);
+
         if (!shape2d) return { geometry: null, width, height };
 
+        // Add female joinery holes if needed
         if (!skipFemaleHoles) {
             this.addFemaleJoineryHoles(shape2d, shape, options);
         }

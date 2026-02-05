@@ -1681,7 +1681,18 @@ export class CanvasRenderer extends Component {
         // Draw anchor points
         this.ctx.fillStyle = '#000';
         points.forEach((p, i) => {
-            this.ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            // Highlight first point when there are 3+ points (can close path)
+            if (i === 0 && this.pathDrawPoints.length >= 3) {
+                // Draw a larger square with green color to indicate it can be clicked to close
+                this.ctx.fillStyle = '#4CAF50'; // Green for "close path" indicator
+                this.ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
+                this.ctx.strokeStyle = '#2E7D32';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(p.x - 4, p.y - 4, 8, 8);
+                this.ctx.fillStyle = '#000'; // Reset for other points
+            } else {
+                this.ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            }
         });
         
         // Visual indicator when next segment will be curved
@@ -1721,8 +1732,19 @@ export class CanvasRenderer extends Component {
         path.toCanvasPath(this.ctx);
         this.ctx.stroke();
         this.ctx.fillStyle = '#000';
-        points.forEach((p) => {
-            this.ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        points.forEach((p, i) => {
+            // Highlight first point when there are 3+ points (can close path)
+            if (i === 0 && this.pathDrawPoints.length >= 3) {
+                // Draw a larger square with green color to indicate it can be clicked to close
+                this.ctx.fillStyle = '#4CAF50'; // Green for "close path" indicator
+                this.ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
+                this.ctx.strokeStyle = '#2E7D32';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(p.x - 4, p.y - 4, 8, 8);
+                this.ctx.fillStyle = '#000'; // Reset for other points
+            } else {
+                this.ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            }
         });
         this.ctx.restore();
     }
@@ -2084,7 +2106,27 @@ export class CanvasRenderer extends Component {
                 Math.abs(worldPos.y - this.lastPathClickPos.y) < 10;
             
             if (isDoubleClick && this.isPathDrawing) {
-                // Double-click: set flag so NEXT segment will be curved
+                // Check if double-clicking on the first point to close the path
+                if (this.pathDrawPoints.length >= 3) {
+                    const firstPoint = this.pathDrawPoints[0];
+                    const distanceToFirst = Math.sqrt(
+                        Math.pow(worldPos.x - firstPoint.x, 2) + 
+                        Math.pow(worldPos.y - firstPoint.y, 2)
+                    );
+                    const closeThreshold = 15 / this.viewport.zoom; // 15 pixels in world space
+                    
+                    if (distanceToFirst < closeThreshold) {
+                        // Double-click on first point: close the path
+                        this.finishPathDrawing(true);
+                        this.skipNextPathClick = true; // Skip the second mousedown of this double-click
+                        this.lastPathClickTime = 0;
+                        this.lastPathClickPos = null;
+                        e.preventDefault();
+                        return;
+                    }
+                }
+                
+                // Double-click elsewhere: set flag so NEXT segment will be curved
                 this.nextSegmentCurved = true;
                 this.pathDrawEditSegmentIndex = null;
                 this.skipNextPathClick = true; // Skip the second mousedown of this double-click
@@ -2102,6 +2144,21 @@ export class CanvasRenderer extends Component {
                 this.lastPathClickTime = now;
                 this.lastPathClickPos = { x: worldPos.x, y: worldPos.y };
             } else {
+                // Check if clicking near the first point to close the path
+                const firstPoint = this.pathDrawPoints[0];
+                const distanceToFirst = Math.sqrt(
+                    Math.pow(worldPos.x - firstPoint.x, 2) + 
+                    Math.pow(worldPos.y - firstPoint.y, 2)
+                );
+                const closeThreshold = 15 / this.viewport.zoom; // 15 pixels in world space
+                
+                if (this.pathDrawPoints.length >= 3 && distanceToFirst < closeThreshold) {
+                    // Close the path by finishing with closed=true
+                    this.finishPathDrawing(true);
+                    e.preventDefault();
+                    return;
+                }
+                
                 // Regular click: add point, check if this segment should be curved
                 this.pathDrawPoints.push({ x: worldPos.x, y: worldPos.y });
                 this.pathDrawCurveSegments.push(this.nextSegmentCurved);
@@ -2849,8 +2906,26 @@ export class CanvasRenderer extends Component {
         const y = e.clientY - rect.top;
         const worldPos = this.screenToWorld(x, y);
         
-        // If in path drawing mode, set curve flag for next segment
+        // If in path drawing mode, check if double-clicking on first point to close
         if (this.toolMode === 'path' && this.isPathDrawing) {
+            // Check if double-clicking on the first point to close the path
+            if (this.pathDrawPoints.length >= 3) {
+                const firstPoint = this.pathDrawPoints[0];
+                const distanceToFirst = Math.sqrt(
+                    Math.pow(worldPos.x - firstPoint.x, 2) + 
+                    Math.pow(worldPos.y - firstPoint.y, 2)
+                );
+                const closeThreshold = 15 / this.viewport.zoom; // 15 pixels in world space
+                
+                if (distanceToFirst < closeThreshold) {
+                    // Double-click on first point: close the path
+                    this.finishPathDrawing(true);
+                    e.preventDefault();
+                    return;
+                }
+            }
+            
+            // Double-click elsewhere: set curve flag for next segment
             this.nextSegmentCurved = true;
             this.requestRender();
             e.preventDefault();
@@ -3137,15 +3212,16 @@ export class CanvasRenderer extends Component {
 
     /**
      * Finish path drawing and add shape
+     * @param {boolean} closed - Whether to close the path (connect last point to first)
      */
-    finishPathDrawing() {
+    finishPathDrawing(closed = false) {
         if (this.pathDrawPoints.length > 1) {
             const shape = new PathShape(
                 `path-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                 { x: 0, y: 0 },
                 this.pathDrawPoints,
                 1,
-                false,
+                closed,
                 this.pathDrawCurveSegments,
                 false,
                 this.pathDrawHandles
