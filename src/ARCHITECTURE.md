@@ -582,7 +582,7 @@ flowchart LR
   CE <-->|CODE_UPDATED / CODE_EXECUTED| ESC
   BE <-->|BLOCKS_UPDATED / BLOCKS_EXECUTED| ESC
   ESC -->|syncFromCode| BE
-  ESC -->|setCode (no run)| CE
+  ESC -->|setCode no run| CE
 
   CE -->|Run| CR
   BE -->|Run| CR
@@ -590,6 +590,7 @@ flowchart LR
   SS --> EB
   EB --> Canvas
   EB --> CE
+
 ```
 
 **Design Patterns**
