@@ -106,8 +106,9 @@ export class AssemblyJoineryDecorator {
             const midDist = (i + 0.5) * toothWidth;
             const baseX = x1 + ux * midDist;
             const baseZ = z1 + uz * midDist;
-            const offsetX = direction.x * depth / 2;
-            const offsetZ = direction.z * depth / 2;
+            const clearance = Math.max(0.05, depth * 0.02);
+            const offsetX = direction.x * (depth / 2 + clearance);
+            const offsetZ = direction.z * (depth / 2 + clearance);
 
             const tooth = new THREE.Mesh(
                 new THREE.BoxGeometry(toothWidth, height, depth),
@@ -177,8 +178,9 @@ export class AssemblyJoineryDecorator {
             const midDist = (i + 0.5) * toothWidth;
             const baseX = x1 + ux * midDist;
             const baseZ = z1 + uz * midDist;
-            const offsetX = direction.x * depth / 2;
-            const offsetZ = direction.z * depth / 2;
+            const clearance = Math.max(0.05, depth * 0.02);
+            const offsetX = direction.x * (depth / 2 + clearance);
+            const offsetZ = direction.z * (depth / 2 + clearance);
 
             const geometry = this.createDovetailGeometry(toothWidth, depth, height, taper);
             const tooth = new THREE.Mesh(geometry, material);

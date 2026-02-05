@@ -43,6 +43,8 @@ export class AssemblyPieceFactory {
                 y: (bounds.min.y + bounds.max.y) / 2
             };
 
+            const joineryMap = this.buildJoineryMap(options);
+
             // Create THREE.js Shape from geometry path anchors
             const shape2d = new THREE.Shape();
             const anchors = geoPath.anchors;
@@ -62,14 +64,42 @@ export class AssemblyPieceFactory {
             for (let i = 1; i < anchors.length; i++) {
                 const a1 = anchors[i - 1];
                 const a2 = anchors[i];
-                this.addSegmentToShape(shape2d, a1, a2, center);
+                const joinery = joineryMap.get(`0:${i - 1}`);
+                if (joinery && this.isLinearSegment(a1, a2)) {
+                    const start = {
+                        x: a1.position.x - center.x,
+                        y: a1.position.y - center.y
+                    };
+                    const end = {
+                        x: a2.position.x - center.x,
+                        y: a2.position.y - center.y
+                    };
+                    const outward = this.outwardForEdge(start, end);
+                    this.appendEdgeWithTeeth(shape2d, start, end, outward, joinery);
+                } else {
+                    this.addSegmentToShape(shape2d, a1, a2, center);
+                }
             }
 
             // Close the path if it's closed, or if we need to close it for extrusion
             if (isClosed && anchors.length > 2) {
                 // Close back to first anchor
                 const lastAnchor = anchors[anchors.length - 1];
-                this.addSegmentToShape(shape2d, lastAnchor, anchors[0], center);
+                const joinery = joineryMap.get(`0:${anchors.length - 1}`);
+                if (joinery && this.isLinearSegment(lastAnchor, anchors[0])) {
+                    const start = {
+                        x: lastAnchor.position.x - center.x,
+                        y: lastAnchor.position.y - center.y
+                    };
+                    const end = {
+                        x: anchors[0].position.x - center.x,
+                        y: anchors[0].position.y - center.y
+                    };
+                    const outward = this.outwardForEdge(start, end);
+                    this.appendEdgeWithTeeth(shape2d, start, end, outward, joinery);
+                } else {
+                    this.addSegmentToShape(shape2d, lastAnchor, anchors[0], center);
+                }
                 shape2d.closePath();
             } else if (!isClosed && anchors.length > 1) {
                 // For open paths, close them for 3D extrusion
@@ -140,6 +170,138 @@ export class AssemblyPieceFactory {
         }
     }
 
+    isLinearSegment(a1, a2) {
+        const handleOutX = (a1.handleOut && typeof a1.handleOut.x === 'number') ? a1.handleOut.x : 0;
+        const handleOutY = (a1.handleOut && typeof a1.handleOut.y === 'number') ? a1.handleOut.y : 0;
+        const handleInX = (a2.handleIn && typeof a2.handleIn.x === 'number') ? a2.handleIn.x : 0;
+        const handleInY = (a2.handleIn && typeof a2.handleIn.y === 'number') ? a2.handleIn.y : 0;
+        return handleOutX === 0 && handleOutY === 0 && handleInX === 0 && handleInY === 0;
+    }
+
+    buildJoineryMap(options = {}) {
+        const edges = options.edges || [];
+        if (!edges.length) return new Map();
+        const joineryProvider = options.joineryProvider;
+        const getJoinery = typeof joineryProvider === 'function'
+            ? joineryProvider
+            : joineryProvider?.getEdgeJoinery?.bind(joineryProvider);
+        if (!getJoinery) return new Map();
+
+        const joineryMap = new Map();
+        edges.forEach(edge => {
+            const joinery = getJoinery(edge);
+            if (!joinery || !edge || !edge.isLinear || !edge.isLinear()) return;
+            const type = String(joinery.type || '').toLowerCase();
+            if (!this.isMaleJoinery(type)) return;
+            joineryMap.set(`${edge.pathIndex}:${edge.index}`, {
+                ...joinery,
+                type
+            });
+        });
+        return joineryMap;
+    }
+
+    isMaleJoinery(type) {
+        return type === 'finger_joint' || type === 'finger_male' || type === 'male'
+            || type === 'dovetail' || type === 'dovetail_male';
+    }
+
+    outwardForEdge(start, end) {
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.hypot(dx, dy) || 1;
+        let nx = -dy / length;
+        let ny = dx / length;
+        const midX = (start.x + end.x) / 2;
+        const midY = (start.y + end.y) / 2;
+        const dot = nx * (-midX) + ny * (-midY);
+        if (dot > 0) {
+            nx = -nx;
+            ny = -ny;
+        }
+        return { x: nx, y: ny };
+    }
+
+    appendEdgeWithTeeth(shape2d, start, end, outward, joinery) {
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.hypot(dx, dy);
+        if (length < 0.001) {
+            shape2d.lineTo(end.x, end.y);
+            return;
+        }
+        const ux = dx / length;
+        const uy = dy / length;
+
+        const thicknessMm = Number(joinery.thicknessMm);
+        const depth = Math.min(Math.max(thicknessMm || 0, 0.5), length * 0.45);
+        const requestedCount = Number(joinery.fingerCount);
+        const count = Number.isFinite(requestedCount) && requestedCount >= 2
+            ? Math.floor(requestedCount)
+            : Math.max(2, Math.floor(length / Math.max(depth * 2, 4)));
+
+        let step = length / count;
+        let edgeInset = step * 0.5;
+        let usableLength = length - edgeInset * 2;
+        if (usableLength <= 0) {
+            edgeInset = 0;
+            usableLength = length;
+        }
+        step = usableLength / count;
+
+        const align = joinery.align || 'left';
+        const startIndex = align === 'right' ? 1 : 0;
+
+        const type = String(joinery.type || '').toLowerCase();
+        const isDovetail = type === 'dovetail' || type === 'dovetail_male';
+        const dovetailTaper = Math.min(depth * 0.2, step * 0.2);
+
+        if (edgeInset > 0) {
+            shape2d.lineTo(start.x + ux * edgeInset, start.y + uy * edgeInset);
+        }
+
+        for (let i = 0; i < count; i += 1) {
+            const segStartDist = edgeInset + step * i;
+            const segEndDist = edgeInset + step * (i + 1);
+            const segStart = {
+                x: start.x + ux * segStartDist,
+                y: start.y + uy * segStartDist
+            };
+            const segEnd = {
+                x: start.x + ux * segEndDist,
+                y: start.y + uy * segEndDist
+            };
+
+            const isTooth = ((i + startIndex) % 2 === 0);
+            if (!isTooth) {
+                shape2d.lineTo(segEnd.x, segEnd.y);
+                continue;
+            }
+
+            shape2d.lineTo(segStart.x, segStart.y);
+
+            if (isDovetail) {
+                const topStart = {
+                    x: segStart.x + outward.x * depth - ux * dovetailTaper,
+                    y: segStart.y + outward.y * depth - uy * dovetailTaper
+                };
+                const topEnd = {
+                    x: segEnd.x + outward.x * depth + ux * dovetailTaper,
+                    y: segEnd.y + outward.y * depth + uy * dovetailTaper
+                };
+                shape2d.lineTo(topStart.x, topStart.y);
+                shape2d.lineTo(topEnd.x, topEnd.y);
+            } else {
+                shape2d.lineTo(segStart.x + outward.x * depth, segStart.y + outward.y * depth);
+                shape2d.lineTo(segEnd.x + outward.x * depth, segEnd.y + outward.y * depth);
+            }
+
+            shape2d.lineTo(segEnd.x, segEnd.y);
+        }
+
+        shape2d.lineTo(end.x, end.y);
+    }
+
     createPiece(shape, options = {}) {
         if (!shape) return null;
 
@@ -178,24 +340,6 @@ export class AssemblyPieceFactory {
     buildGeometry(shape, options = {}) {
         const thickness = this.thickness;
         let skipFemaleHoles = false;
-
-        // Special handling for rectangles with joinery (needs custom edge notches)
-        if (shape.type === 'rectangle') {
-            const joineryBySide = this.getRectangleJoinery(shape, options);
-            if (joineryBySide) {
-                const width = shape.width;
-                const height = shape.height;
-                const shape2d = this.rectShapeWithJoinery(width, height, shape, joineryBySide);
-                skipFemaleHoles = true;
-                
-                const geometry = new THREE.ExtrudeGeometry(shape2d, {
-                    depth: thickness,
-                    bevelEnabled: false
-                });
-                geometry.rotateX(-Math.PI / 2);
-                return { geometry, width, height };
-            }
-        }
 
         // Universal converter: use the shape's SVG path definition for all shapes
         // Special handling for Donut: it uses winding-rule holes which THREE.js doesn't support directly

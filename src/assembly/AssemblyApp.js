@@ -89,7 +89,7 @@ export class AssemblyApp {
                     joineryProvider: shapeStore
                 });
                 if (!piece) return null;
-                this.joinery.apply(piece.mesh, shape, edges, shapeStore);
+                // Joinery is baked into geometry; no separate overlay needed.
                 piece.mesh.userData.source = shape;
                 return piece;
             })

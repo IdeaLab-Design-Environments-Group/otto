@@ -801,6 +801,27 @@ export class CanvasRenderer extends Component {
     }
 
     /**
+     * Execute drawing logic with a rotation applied around bounds center.
+     * Always restores the context to avoid leaking transforms or styles.
+     * @param {{x:number,y:number,width:number,height:number}} bounds
+     * @param {number} rotation
+     * @param {Function} drawFn
+     */
+    withShapeRotation(bounds, rotation, drawFn) {
+        const rotationDeg = Number(rotation || 0);
+        this.ctx.save();
+        if (rotationDeg && bounds) {
+            const cx = bounds.x + bounds.width / 2;
+            const cy = bounds.y + bounds.height / 2;
+            this.ctx.translate(cx, cy);
+            this.ctx.rotate((rotationDeg * Math.PI) / 180);
+            this.ctx.translate(-cx, -cy);
+        }
+        drawFn();
+        this.ctx.restore();
+    }
+
+    /**
      * Render finger joint previews for edges with joinery metadata
      */
     renderEdgeJoinery() {
@@ -1076,12 +1097,13 @@ export class CanvasRenderer extends Component {
             // Draw selection fill for closed shapes (no fill for open shapes)
             if (this.isClosedShape(shapeForBounds) && typeof shapeForBounds.toGeometryPath === 'function') {
                 const path = shapeForBounds.toGeometryPath();
-                this.ctx.save();
-                this.ctx.beginPath();
-                path.toCanvasPath(this.ctx);
-                this.ctx.fillStyle = 'rgba(0, 153, 255, 0.08)';
-                this.ctx.fill('evenodd');
-                this.ctx.restore();
+                const rotation = Number(shape.rotation || shapeForBounds.rotation || 0);
+                this.withShapeRotation(bounds, rotation, () => {
+                    this.ctx.beginPath();
+                    path.toCanvasPath(this.ctx);
+                    this.ctx.fillStyle = 'rgba(0, 153, 255, 0.08)';
+                    this.ctx.fill('evenodd');
+                });
             }
 
             const rotation = Number(shape.rotation || 0);
@@ -1125,41 +1147,39 @@ export class CanvasRenderer extends Component {
         const resolved = this.bindingResolver.resolveShape(shape);
         const bounds = resolved.getBounds();
         
-        // Draw hover fill for closed shapes
-        if (this.isClosedShape(resolved) && typeof resolved.toGeometryPath === 'function') {
-            const path = resolved.toGeometryPath();
-            this.ctx.save();
-            this.ctx.beginPath();
-            path.toCanvasPath(this.ctx);
-            this.ctx.fillStyle = 'rgba(0, 153, 255, 0.12)';
-            this.ctx.fill('evenodd');
-            this.ctx.restore();
-        }
-        
-        // Draw hover outline
-        this.ctx.save();
-        this.ctx.strokeStyle = '#0099ff';
-        this.ctx.lineWidth = 2 / this.viewport.zoom;
-        this.ctx.setLineDash([]);
-        
-        if (resolved.type === 'circle' && typeof resolved.toGeometryPath === 'function') {
-            const path = resolved.toGeometryPath();
-            this.ctx.beginPath();
-            path.toCanvasPath(this.ctx);
-            this.ctx.stroke();
-        } else if (resolved.type === 'rectangle') {
-            this.ctx.strokeRect(resolved.x, resolved.y, resolved.width, resolved.height);
-        } else if (typeof resolved.toGeometryPath === 'function') {
-            const path = resolved.toGeometryPath();
-            this.ctx.beginPath();
-            path.toCanvasPath(this.ctx);
-            this.ctx.stroke();
-        } else {
-            // Fallback to bounding box
-            this.ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        }
-        
-        this.ctx.restore();
+        const rotation = Number(shape.rotation || resolved.rotation || 0);
+        this.withShapeRotation(bounds, rotation, () => {
+            // Draw hover fill for closed shapes
+            if (this.isClosedShape(resolved) && typeof resolved.toGeometryPath === 'function') {
+                const path = resolved.toGeometryPath();
+                this.ctx.beginPath();
+                path.toCanvasPath(this.ctx);
+                this.ctx.fillStyle = 'rgba(0, 153, 255, 0.12)';
+                this.ctx.fill('evenodd');
+            }
+
+            // Draw hover outline
+            this.ctx.strokeStyle = '#0099ff';
+            this.ctx.lineWidth = 2 / this.viewport.zoom;
+            this.ctx.setLineDash([]);
+
+            if (resolved.type === 'circle' && typeof resolved.toGeometryPath === 'function') {
+                const path = resolved.toGeometryPath();
+                this.ctx.beginPath();
+                path.toCanvasPath(this.ctx);
+                this.ctx.stroke();
+            } else if (resolved.type === 'rectangle') {
+                this.ctx.strokeRect(resolved.x, resolved.y, resolved.width, resolved.height);
+            } else if (typeof resolved.toGeometryPath === 'function') {
+                const path = resolved.toGeometryPath();
+                this.ctx.beginPath();
+                path.toCanvasPath(this.ctx);
+                this.ctx.stroke();
+            } else {
+                // Fallback to bounding box
+                this.ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+            }
+        });
     }
 
     /**
