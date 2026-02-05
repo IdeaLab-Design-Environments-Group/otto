@@ -1,4 +1,21 @@
 /**
+ * @fileoverview Facade Pattern -- PluginAPI is the single, stable public
+ * surface that plugin authors interact with.  It wraps every internal
+ * subsystem (EventBus, ShapeRegistry, BindingRegistry, CommandRegistry,
+ * SceneState) behind clean, versioned method signatures.  Internal
+ * refactors -- renaming a store method, changing an event payload shape,
+ * splitting a registry into two classes -- do not break plugins as long as
+ * this facade's contract remains unchanged.
+ *
+ * The class is organised into clearly labelled sections:
+ *   - Event System Access   : subscribe, emit, raw EventBus escape-hatch
+ *   - Shape Registration    : register/unregister/create custom shape types
+ *   - Binding Registration  : register/unregister custom binding strategies
+ *   - Command Registration  : register/unregister/execute undoable commands
+ *   - Scene Access          : read and mutate the live shape/parameter stores
+ *   - Hook System           : lightweight lifecycle hooks (separate from EventBus)
+ *   - Utility Methods       : prefixed logging helpers and version query
+ *
  * PluginAPI - Facade Pattern Implementation
  *
  * Provides a simplified, unified API for plugin developers.
@@ -13,13 +30,26 @@
  */
 export class PluginAPI {
     /**
+     * Construct the facade by injecting all internal dependencies.  The
+     * options object is the only place these references are captured;
+     * nothing is imported directly so that the class stays fully testable
+     * with mocks.
+     *
      * @param {Object} options - API configuration
-     * @param {Object} options.eventBus - EventBus instance
-     * @param {Object} options.shapeRegistry - ShapeRegistry class
-     * @param {Object} options.bindingRegistry - BindingRegistry module
-     * @param {Object} options.commandRegistry - CommandRegistry instance
-     * @param {Object} options.sceneState - SceneState instance
-     * @param {Object} options.application - Application instance
+     * @param {Object} options.eventBus          - The singleton EventBus
+     *   instance used across the application.
+     * @param {Object} options.shapeRegistry     - The ShapeRegistry class
+     *   (static methods); used for shape type registration and creation.
+     * @param {Object} options.bindingRegistry   - The BindingRegistry module;
+     *   exposes registerBindingType / unregisterBindingType.
+     * @param {Object} options.commandRegistry   - The CommandRegistry instance;
+     *   manages the undo stack and named command dispatch.
+     * @param {Object} options.sceneState        - The active SceneState;
+     *   gives access to shapeStore, parameterStore, and viewport.
+     * @param {Object} options.application       - The top-level Application
+     *   instance (used for version queries).
+     * @param {Object} [options.geometry]        - The geometry utility library
+     *   (cuttle-geometry port); optional -- may be undefined if not loaded.
      */
     constructor(options = {}) {
         this._eventBus = options.eventBus;
@@ -28,7 +58,16 @@ export class PluginAPI {
         this._commandRegistry = options.commandRegistry;
         this._sceneState = options.sceneState;
         this._application = options.application;
+        this._geometry = options.geometry;
 
+        /**
+         * Plugin lifecycle hook registry.  Each key is a hook name (e.g.
+         * {@code 'before-render'}) and each value is a {@link Set} of handler
+         * functions.  Managed via {@link PluginAPI#addHook},
+         * {@link PluginAPI#removeHook}, and {@link PluginAPI#executeHook}.
+         * @type {Map<string, Set<Function>>}
+         * @private
+         */
         // Hooks registry
         this._hooks = new Map();
     }
@@ -51,6 +90,14 @@ export class PluginAPI {
      */
     get EVENTS() {
         return this._eventBus.constructor.EVENTS || {};
+    }
+
+    /**
+     * Get the geometry library (cuttle-geometry port)
+     * @returns {Object|undefined}
+     */
+    get geometry() {
+        return this._geometry;
     }
 
     /**
@@ -125,7 +172,8 @@ export class PluginAPI {
      * @returns {Shape}
      */
     createShape(type, position, options) {
-        return this._shapeRegistry.create(type, position, options);
+        const shapeStore = this._sceneState?.shapeStore || null;
+        return this._shapeRegistry.create(type, position, options, shapeStore);
     }
 
     // ===========================================

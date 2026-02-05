@@ -8,7 +8,23 @@
  * - Plugin support: Third-party shapes can register themselves
  */
 import { Circle } from './Circle.js';
+import { Line } from './Line.js';
 import { Rectangle } from './Rectangle.js';
+import { PathShape } from './PathShape.js';
+import { Polygon } from './Polygon.js';
+import { Star } from './Star.js';
+import { Triangle } from './Triangle.js';
+import { Ellipse } from './Ellipse.js';
+import { Arc } from './Arc.js';
+import { RoundedRectangle } from './RoundedRectangle.js';
+import { Donut } from './Donut.js';
+import { Cross } from './Cross.js';
+import { Gear } from './Gear.js';
+import { Spiral } from './Spiral.js';
+import { Wave } from './Wave.js';
+import { Slot } from './Slot.js';
+import { Arrow } from './Arrow.js';
+import { ChamferRectangle } from './ChamferRectangle.js';
 import { createBindingFromJSON } from '../BindingRegistry.js';
 
 /**
@@ -25,6 +41,9 @@ export class ShapeRegistry {
     // Private registry: Map<type, ShapeRegistryEntry>
     static #registry = new Map();
     
+    // Counter for generating readable IDs per shape type
+    static #idCounters = new Map();
+    
     // Initialize registry with default shapes
     static {
         // Register Circle
@@ -34,9 +53,22 @@ export class ShapeRegistry {
                 position,
                 options.centerX || position.x || 0,
                 options.centerY || position.y || 0,
-                options.radius || 50
+                options.radius || 20
             ),
             Circle.fromJSON
+        );
+
+        // Register Line
+        this.register('line',
+            (id, position, options) => new Line(
+                id,
+                position,
+                options.x1 ?? position.x ?? 0,
+                options.y1 ?? position.y ?? 0,
+                options.x2 ?? (position.x ?? 0) + 40,
+                options.y2 ?? position.y ?? 0
+            ),
+            Line.fromJSON
         );
 
         // Register Rectangle
@@ -46,10 +78,212 @@ export class ShapeRegistry {
                 position,
                 options.x || position.x || 0,
                 options.y || position.y || 0,
-                options.width || 100,
-                options.height || 100
+                options.width || 40,
+                options.height || 40
             ),
             Rectangle.fromJSON
+        );
+
+        // Register Path (freeform)
+        this.register('path',
+            (id, position, options) => new PathShape(
+                id,
+                position,
+                options.points || [],
+                options.strokeWidth || 2,
+                options.closed || false
+            ),
+            PathShape.fromJSON
+        );
+
+        // Register Polygon
+        this.register('polygon',
+            (id, position, options) => new Polygon(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.radius || 20,
+                options.sides || 5
+            ),
+            Polygon.fromJSON
+        );
+
+        // Register Star
+        this.register('star',
+            (id, position, options) => new Star(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.outerRadius || 20,
+                options.innerRadius || 10,
+                options.points || 5
+            ),
+            Star.fromJSON
+        );
+
+        // Register Triangle
+        this.register('triangle',
+            (id, position, options) => new Triangle(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.base || 30,
+                options.height || 40
+            ),
+            Triangle.fromJSON
+        );
+
+        // Register Ellipse
+        this.register('ellipse',
+            (id, position, options) => new Ellipse(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.radiusX || 30,
+                options.radiusY || 20
+            ),
+            Ellipse.fromJSON
+        );
+
+        // Register Arc
+        this.register('arc',
+            (id, position, options) => new Arc(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.radius || 25,
+                options.startAngle || 0,
+                options.endAngle || 90
+            ),
+            Arc.fromJSON
+        );
+
+        // Register RoundedRectangle
+        this.register('roundedrectangle',
+            (id, position, options) => new RoundedRectangle(
+                id,
+                position,
+                options.x || position.x || 0,
+                options.y || position.y || 0,
+                options.width || 50,
+                options.height || 50,
+                options.cornerRadius || options.radius || 5
+            ),
+            RoundedRectangle.fromJSON
+        );
+
+        // Register Donut
+        this.register('donut',
+            (id, position, options) => new Donut(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.outerRadius || 25,
+                options.innerRadius || 12.5
+            ),
+            Donut.fromJSON
+        );
+
+        // Register Cross
+        this.register('cross',
+            (id, position, options) => new Cross(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.width || 50,
+                options.thickness || 10
+            ),
+            Cross.fromJSON
+        );
+
+        // Register Gear
+        this.register('gear',
+            (id, position, options) => new Gear(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.pitchDiameter || options.pitch_diameter || 25,
+                options.teeth || 10,
+                options.pressureAngle || options.pressure_angle || 20
+            ),
+            Gear.fromJSON
+        );
+
+        // Register Spiral
+        this.register('spiral',
+            (id, position, options) => new Spiral(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.startRadius || 5,
+                options.endRadius || 25,
+                options.turns || 3
+            ),
+            Spiral.fromJSON
+        );
+
+        // Register Wave
+        this.register('wave',
+            (id, position, options) => new Wave(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.width || 50,
+                options.amplitude || 10,
+                options.frequency || 2
+            ),
+            Wave.fromJSON
+        );
+
+        // Register Slot
+        this.register('slot',
+            (id, position, options) => new Slot(
+                id,
+                position,
+                options.centerX || position.x || 0,
+                options.centerY || position.y || 0,
+                options.length || 50,
+                options.width || options.slotWidth || 15
+            ),
+            Slot.fromJSON
+        );
+
+        // Register Arrow
+        this.register('arrow',
+            (id, position, options) => new Arrow(
+                id,
+                position,
+                options.x || position.x || 0,
+                options.y || position.y || 0,
+                options.length || 50,
+                options.headWidth || 15,
+                options.headLength || 12.5
+            ),
+            Arrow.fromJSON
+        );
+
+        // Register ChamferRectangle
+        this.register('chamferrectangle',
+            (id, position, options) => new ChamferRectangle(
+                id,
+                position,
+                options.x || position.x || 0,
+                options.y || position.y || 0,
+                options.width || 50,
+                options.height || 50,
+                options.chamfer || 5
+            ),
+            ChamferRectangle.fromJSON
         );
     }
     
@@ -114,9 +348,10 @@ export class ShapeRegistry {
      * @param {string} type 
      * @param {Object} position 
      * @param {Object} options - Additional options for shape creation
+     * @param {ShapeStore} shapeStore - Optional shape store to check existing IDs
      * @returns {Shape}
      */
-    static create(type, position = { x: 0, y: 0 }, options = {}) {
+    static create(type, position = { x: 0, y: 0 }, options = {}, shapeStore = null) {
         const normalizedType = type.toLowerCase();
         const entry = this.#registry.get(normalizedType);
         
@@ -129,7 +364,7 @@ export class ShapeRegistry {
             );
         }
         
-        const id = options.id || this.generateId(normalizedType);
+        const id = options.id || this.generateId(normalizedType, shapeStore);
         return entry.create(id, position, options);
     }
     
@@ -173,11 +408,49 @@ export class ShapeRegistry {
     }
     
     /**
-     * Generate a unique ID for a shape
+     * Generate a readable ID for a shape (e.g., "Circle 1", "Rectangle 2")
      * @param {string} type 
+     * @param {ShapeStore} shapeStore - Optional shape store to check existing IDs
      * @returns {string}
      */
-    static generateId(type) {
-        return `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    static generateId(type, shapeStore = null) {
+        // Capitalize first letter of type
+        const capitalizedType = type.charAt(0).toUpperCase() + type.slice(1);
+        
+        // Get current counter for this type
+        let counter = this.#idCounters.get(type) || 0;
+        
+        // If shapeStore is provided, find the highest number for this type
+        if (shapeStore && typeof shapeStore.getAll === 'function') {
+            const allShapes = shapeStore.getAll();
+            const existingNumbers = [];
+            
+            allShapes.forEach(shape => {
+                if (shape.type === type) {
+                    // Try to extract number from existing ID
+                    const match = shape.id.match(new RegExp(`^${capitalizedType}\\s+(\\d+)$`, 'i'));
+                    if (match) {
+                        existingNumbers.push(parseInt(match[1], 10));
+                    }
+                }
+            });
+            
+            if (existingNumbers.length > 0) {
+                counter = Math.max(...existingNumbers);
+            }
+        }
+        
+        // Increment counter
+        counter++;
+        this.#idCounters.set(type, counter);
+        
+        return `${capitalizedType} ${counter}`;
+    }
+    
+    /**
+     * Reset ID counters (useful for testing or when clearing all shapes)
+     */
+    static resetIdCounters() {
+        this.#idCounters.clear();
     }
 }

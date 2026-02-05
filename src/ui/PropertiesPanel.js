@@ -14,6 +14,7 @@ export class PropertiesPanel extends Component {
         this.selectedShape = null;
         this.selectedShapeIds = new Set(); // Multi-selection
         this.bindingResolver = shapeStore.bindingResolver;
+        this.selectedEdges = []; // Edge selection
         
         // Subscribe to shape selection events (only once in constructor)
         this.subscribe(EVENTS.SHAPE_SELECTED, (payload) => {
@@ -29,6 +30,26 @@ export class PropertiesPanel extends Component {
             this.render();
         });
         
+        // Subscribe to shape added/removed events to update the list
+        this.subscribe(EVENTS.SHAPE_ADDED, () => {
+            this.render();
+        });
+        
+        this.subscribe(EVENTS.SHAPE_REMOVED, () => {
+            this.render();
+        });
+        
+        // Subscribe to edge selection events
+        this.subscribe(EVENTS.EDGE_SELECTED, (payload) => {
+            this.selectedEdges = payload?.edges || [];
+            this.render();
+        });
+
+        // Subscribe to selection mode changes
+        this.subscribe(EVENTS.SELECTION_MODE_CHANGED, () => {
+            this.render();
+        });
+
         // Subscribe to parameter changes to refresh property values
         // Use requestAnimationFrame to debounce rapid updates
         this._pendingRender = false;
@@ -62,27 +83,235 @@ export class PropertiesPanel extends Component {
     }
     
     /**
-     * Render the properties panel
+     * Render the properties panel - now shows all shapes in compact layers format
      */
     render() {
         if (!this.container) {
             console.warn('PropertiesPanel: Container not found');
             return;
         }
-        
+
         this.container.innerHTML = '';
-        
-        if (this.selectedShapeIds.size === 0 && !this.selectedShape) {
+
+        // Render selection mode toggle
+        this.renderSelectionModeToggle();
+
+        // Get all shapes
+        const allShapes = this.shapeStore.getAll();
+
+        // Show edge info if in edge selection mode
+        const selectionMode = this.shapeStore.getSelectionMode();
+        if (selectionMode === 'edge') {
+            this.renderEdgeInfo();
+        }
+
+        if (allShapes.length === 0) {
             this.renderEmpty();
             return;
         }
-        
-        // Render multi-selection or single selection
-        if (this.selectedShapeIds.size > 1) {
-            this.renderMultiSelection();
-        } else if (this.selectedShape) {
-            this.renderProperties(this.selectedShape);
+
+        // Render all shapes in compact layers format
+        this.renderLayersList(allShapes);
+    }
+
+    /**
+     * Render selection mode toggle button
+     */
+    renderSelectionModeToggle() {
+        const currentMode = this.shapeStore.getSelectionMode();
+
+        const toggleContainer = this.createElement('div', {
+            class: 'selection-mode-toggle'
+        });
+
+        const label = this.createElement('span', {
+            class: 'selection-mode-label'
+        }, 'Mode:');
+
+        const shapeBtn = this.createElement('button', {
+            class: `mode-btn ${currentMode === 'shape' ? 'mode-btn-active' : ''}`,
+            title: 'Shape Selection (V)'
+        }, 'Shape');
+
+        const edgeBtn = this.createElement('button', {
+            class: `mode-btn ${currentMode === 'edge' ? 'mode-btn-active' : ''}`,
+            title: 'Edge Selection (E)'
+        }, 'Edge');
+
+        shapeBtn.addEventListener('click', () => {
+            this.shapeStore.setSelectionMode('shape');
+        });
+
+        edgeBtn.addEventListener('click', () => {
+            this.shapeStore.setSelectionMode('edge');
+        });
+
+        toggleContainer.appendChild(label);
+        toggleContainer.appendChild(shapeBtn);
+        toggleContainer.appendChild(edgeBtn);
+
+        this.container.appendChild(toggleContainer);
+    }
+
+    /**
+     * Render edge selection info
+     */
+    renderEdgeInfo() {
+        const selectedEdges = this.shapeStore.getSelectedEdges();
+
+        const edgeSection = this.createElement('div', {
+            class: 'edge-info-section'
+        });
+
+        const header = this.createElement('div', {
+            class: 'edge-info-header'
+        }, selectedEdges.length > 0
+            ? `${selectedEdges.length} Edge${selectedEdges.length !== 1 ? 's' : ''} Selected`
+            : 'No edges selected');
+
+        edgeSection.appendChild(header);
+
+        if (selectedEdges.length > 0) {
+            selectedEdges.forEach((edge, index) => {
+                const edgeItem = this.createElement('div', {
+                    class: 'edge-item'
+                });
+
+                const edgeName = this.createElement('span', {
+                    class: 'edge-name'
+                }, `Edge ${edge.index + 1}`);
+
+                const edgeLength = this.createElement('span', {
+                    class: 'edge-length'
+                }, `${edge.length().toFixed(2)} units`);
+
+                const edgeType = this.createElement('span', {
+                    class: `edge-type ${edge.isLinear() ? 'edge-linear' : 'edge-curved'}`
+                }, edge.isLinear() ? 'Linear' : 'Curved');
+
+                edgeItem.appendChild(edgeName);
+                edgeItem.appendChild(edgeLength);
+                edgeItem.appendChild(edgeType);
+
+                edgeSection.appendChild(edgeItem);
+            });
+        } else {
+            const hint = this.createElement('div', {
+                class: 'edge-hint'
+            }, 'Click on an edge to select it. Hold Shift for multi-select.');
+            edgeSection.appendChild(hint);
         }
+
+        this.container.appendChild(edgeSection);
+    }
+    
+    /**
+     * Render all shapes in a compact layers-style list
+     * @param {Array<Shape>} shapes 
+     */
+    renderLayersList(shapes) {
+        // Render shapes in reverse order (last drawn = top of list)
+        const reversedShapes = [...shapes].reverse();
+        
+        reversedShapes.forEach(shape => {
+            const layerItem = this.createLayerItem(shape);
+            this.container.appendChild(layerItem);
+        });
+    }
+    
+    /**
+     * Create a layer item for a shape
+     * @param {Shape} shape 
+     * @returns {HTMLElement}
+     */
+    createLayerItem(shape) {
+        const isSelected = this.selectedShapeIds.has(shape.id) || this.selectedShape?.id === shape.id;
+        
+        const item = this.createElement('div', {
+            class: `layer-item ${isSelected ? 'layer-item-selected' : ''}`
+        });
+        
+        // Left side: expand/collapse icon (for paths) and shape name
+        const leftSide = this.createElement('div', {
+            class: 'layer-item-left'
+        });
+        
+        // Expand/collapse icon for paths (placeholder for now)
+        if (shape.type === 'path') {
+            const expandIcon = this.createElement('span', {
+                class: 'layer-expand-icon'
+            }, '▶');
+            leftSide.appendChild(expandIcon);
+        } else {
+            // Spacer for non-path shapes
+            const spacer = this.createElement('span', {
+                class: 'layer-expand-icon layer-expand-icon-hidden'
+            }, '▶');
+            leftSide.appendChild(spacer);
+        }
+        
+        // Shape name
+        const shapeName = this.createElement('span', {
+            class: 'layer-item-name'
+        }, shape.id);
+        leftSide.appendChild(shapeName);
+        
+        // Right side: icons
+        const rightSide = this.createElement('div', {
+            class: 'layer-item-right'
+        });
+        
+        // Transform icon (up/down arrows)
+        const transformIcon = this.createElement('span', {
+            class: 'layer-icon layer-icon-transform',
+            title: 'Transform'
+        }, '⇅');
+        rightSide.appendChild(transformIcon);
+        
+        // Path/stroke icon (wavy line)
+        const pathIcon = this.createElement('span', {
+            class: 'layer-icon layer-icon-path',
+            title: 'Path'
+        }, '~');
+        rightSide.appendChild(pathIcon);
+        
+        item.appendChild(leftSide);
+        item.appendChild(rightSide);
+        
+        // Click to select
+        item.addEventListener('click', (e) => {
+            // Don't trigger if clicking on icons
+            if (e.target.classList.contains('layer-icon')) {
+                return;
+            }
+            
+            const shiftKey = e.shiftKey;
+            if (shiftKey) {
+                // Multi-select
+                if (isSelected) {
+                    this.shapeStore.removeFromSelection(shape.id);
+                    this.selectedShapeIds.delete(shape.id);
+                } else {
+                    this.shapeStore.addToSelection(shape.id);
+                    this.selectedShapeIds.add(shape.id);
+                }
+            } else {
+                // Single select
+                this.shapeStore.setSelected(shape.id);
+                this.selectedShape = shape;
+                this.selectedShapeIds = new Set([shape.id]);
+            }
+            
+            EventBus.emit(EVENTS.SHAPE_SELECTED, {
+                id: shape.id,
+                shape: shape,
+                selectedIds: Array.from(this.selectedShapeIds)
+            });
+            
+            this.render();
+        });
+        
+        return item;
     }
     
     /**
@@ -91,7 +320,7 @@ export class PropertiesPanel extends Component {
     renderEmpty() {
         const message = this.createElement('div', {
             class: 'properties-empty'
-        }, 'No shape selected');
+        }, 'No shapes');
         
         if (this.container) {
             this.container.appendChild(message);

@@ -11,10 +11,15 @@ import { PropertiesPanel } from '../ui/PropertiesPanel.js';
 import { TabBar } from '../ui/TabBar.js';
 import { ZoomControls } from '../ui/ZoomControls.js';
 import { PanelResizer } from '../ui/PanelResizer.js';
+import { BlocksEditor } from '../ui/BlocksEditor.js';
+import { CodeEditor } from '../ui/CodeEditor.js';
+import { EditorSyncConnector } from '../ui/EditorSyncConnector.js';
+import { CodeRunner } from '../programming/CodeRunner.js';
 import { DragDropManager } from './DragDropManager.js';
 import { Serializer } from '../persistence/Serializer.js';
 import { StorageManager } from '../persistence/StorageManager.js';
 import { FileManager } from '../persistence/FileManager.js';
+import * as Geometry from '../geometry/index.js';
 import { SceneHistory, SceneMemento } from './SceneState.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 
@@ -22,6 +27,8 @@ export class Application {
     constructor() {
         // Core managers
         this.tabManager = new TabManager();
+        // Geometry library (cuttle-geometry port)
+        this.geometry = Geometry;
         // Serializer is a static class, no instance needed
         this.storageManager = new StorageManager(this.tabManager, Serializer);
         this.fileManager = new FileManager(this.tabManager, Serializer);
@@ -34,6 +41,10 @@ export class Application {
         this.tabBar = null;
         this.zoomControls = null;
         this.dragDropManager = null;
+        this.blocksEditor = null;
+        this.codeEditor = null;
+        this.codeRunner = null;
+        this.editorSyncConnector = null;
         
         // Undo/Redo history
         this.sceneHistory = null;
@@ -53,9 +64,11 @@ export class Application {
         const parametersMenuContainer = document.getElementById('parameters-menu-container');
         const propertiesPanelContainer = document.getElementById('properties-panel-container');
         const zoomControlsContainer = document.getElementById('zoom-controls-container');
+        const blocklyContainer = document.getElementById('blockly-container');
+        const codeEditorContainer = document.getElementById('code-editor-container');
 
         if (!tabBarContainer || !shapeLibraryContainer || !canvasElement ||
-            !parametersMenuContainer || !propertiesPanelContainer || !zoomControlsContainer) {
+            !parametersMenuContainer || !propertiesPanelContainer || !zoomControlsContainer || !blocklyContainer) {
             throw new Error('Required DOM elements not found');
         }
         
@@ -83,11 +96,46 @@ export class Application {
             this.currentSceneState, 
             this.currentSceneState.bindingResolver
         );
+
+        this.blocksEditor = new BlocksEditor(
+            blocklyContainer,
+            ShapeRegistry,
+            this.currentSceneState.shapeStore,
+            this.currentSceneState.parameterStore,
+            this.canvasRenderer
+        );
+        this.blocksEditor.mount();
+
+        // Initialize Code Editor (text-based programming)
+        if (codeEditorContainer) {
+            this.codeEditor = new CodeEditor(
+                codeEditorContainer,
+                this.currentSceneState.shapeStore,
+                this.currentSceneState.parameterStore,
+                this.canvasRenderer
+            );
+            this.codeEditor.mount();
+        }
+
+        if (this.blocksEditor && this.codeEditor) {
+            this.editorSyncConnector = new EditorSyncConnector({
+                codeEditor: this.codeEditor,
+                blocksEditor: this.blocksEditor
+            });
+            this.editorSyncConnector.connect();
+        }
+
+        // Initialize text-based programming runner (for console access)
+        this.codeRunner = new CodeRunner({
+            shapeStore: this.currentSceneState.shapeStore,
+            parameterStore: this.currentSceneState.parameterStore
+        });
         
         // Initialize Zoom Controls
         this.zoomControls = new ZoomControls(zoomControlsContainer, this.currentSceneState.viewport);
         this.zoomControls.setSceneState(this.currentSceneState);
         this.zoomControls.setCanvas(canvasElement);
+        this.zoomControls.getBaseZoom = () => this.canvasRenderer.baseZoom || 1;
         this.zoomControls.onZoomChange = (factor, centerX, centerY) => {
             this.canvasRenderer.zoom(factor, centerX, centerY);
         };
@@ -132,6 +180,9 @@ export class Application {
 
         // Setup event listeners
         this.setupEventListeners();
+
+        // Setup left panel tabs
+        this.setupLeftPanelTabs();
         
         // Setup keyboard shortcuts
         this.setupKeyboardShortcuts();
@@ -180,6 +231,9 @@ export class Application {
         EventBus.subscribe(EVENTS.PARAM_CHANGED, () => {
             setTimeout(() => this.createHistorySnapshot(), 100);
         });
+        EventBus.subscribe(EVENTS.EDGE_JOINERY_CHANGED, () => {
+            setTimeout(() => this.createHistorySnapshot(), 100);
+        });
     }
     
     /**
@@ -187,6 +241,9 @@ export class Application {
      */
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
+            if (this.isEditableTarget(e.target)) {
+                return;
+            }
             // Ctrl+S or Cmd+S: Save
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
@@ -227,6 +284,20 @@ export class Application {
             }
         });
     }
+
+    /**
+     * Return true if a key event target is an editable control.
+     * @param {EventTarget|null} target
+     */
+    isEditableTarget(target) {
+        const el = target instanceof Element ? target : null;
+        if (!el) return false;
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
+        if (el.isContentEditable) return true;
+        if (el.closest('.CodeMirror')) return true;
+        if (el.closest('.blockly-workspace') || el.closest('#blockly-container')) return true;
+        return false;
+    }
     
     /**
      * Update components when switching to a new scene
@@ -264,6 +335,57 @@ export class Application {
         
         // Update drag drop manager
         this.dragDropManager.shapeStore = sceneState.shapeStore;
+
+        // Update blocks editor
+        if (this.blocksEditor) {
+            this.blocksEditor.setShapeStore(sceneState.shapeStore);
+            this.blocksEditor.setParameterStore(sceneState.parameterStore);
+            this.blocksEditor.setCanvasRenderer(this.canvasRenderer);
+        }
+
+        // Update code editor stores + sync
+        if (this.codeEditor) {
+            this.codeEditor.setStores(
+                sceneState.shapeStore,
+                sceneState.parameterStore,
+                this.canvasRenderer
+            );
+        }
+    }
+
+    /**
+     * Setup left panel tab switching between library and blocks
+     */
+    setupLeftPanelTabs() {
+        const tabButtons = Array.from(document.querySelectorAll('.panel-tab'));
+        const tabPanels = Array.from(document.querySelectorAll('.panel-content-tab'));
+
+        if (!tabButtons.length || !tabPanels.length) {
+            return;
+        }
+
+        const setActive = (panelName) => {
+            tabButtons.forEach(button => {
+                const isActive = button.dataset.panel === panelName;
+                button.classList.toggle('active', isActive);
+            });
+            tabPanels.forEach(panel => {
+                const isActive = panel.dataset.panel === panelName;
+                panel.classList.toggle('is-hidden', !isActive);
+            });
+
+            if (this.blocksEditor) {
+                this.blocksEditor.setVisible(panelName === 'blocks');
+            }
+        };
+
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                setActive(button.dataset.panel);
+            });
+        });
+
+        setActive('library');
     }
     
     /**

@@ -1,0 +1,149 @@
+body.assembly-page {
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    color: #0f172a;
+    overflow: hidden;
+}
+
+.assembly-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #0f172a;
+    color: #f8fafc;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+    height: 56px;
+}
+
+.assembly-toolbar__left,
+.assembly-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.assembly-toolbar__center {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.assembly-title {
+    font-size: 18px;
+    letter-spacing: 0.08em;
+}
+
+.assembly-subtitle {
+    font-size: 12px;
+    color: #cbd5f5;
+    text-transform: uppercase;
+}
+
+.assembly-meta {
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 6px 10px;
+    border-radius: 999px;
+}
+
+.assembly-main {
+    position: relative;
+    width: 100vw;
+    height: calc(100vh - 56px);
+}
+
+.assembly-canvas-container {
+    width: 100%;
+    height: 100%;
+}
+
+.assembly-controls {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 200px;
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 12px;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.35);
+}
+
+.assembly-controls__header {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #e2e8f0;
+}
+
+.assembly-controls__row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.assembly-controls__buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.assembly-controls__buttons button {
+    padding: 6px 8px;
+    font-size: 11px;
+    background: #1e293b;
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 6px;
+}
+
+.assembly-controls__buttons button.is-active {
+    background: #f97316;
+    border-color: #fb923c;
+    color: #0f172a;
+}
+
+.assembly-controls__label {
+    font-size: 11px;
+    color: #cbd5f5;
+}
+
+.assembly-controls__value {
+    font-weight: 600;
+}
+
+.assembly-controls__hint {
+    font-size: 10px;
+    color: #cbd5e1;
+    line-height: 1.4;
+}
+
+.assembly-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: rgba(248, 250, 252, 0.92);
+    color: #1e293b;
+    gap: 8px;
+}
+
+.assembly-empty h2 {
+    font-size: 20px;
+}
+
+.assembly-empty p {
+    max-width: 420px;
+    font-size: 13px;
+}
+
+.is-hidden {
+    display: none;
+}

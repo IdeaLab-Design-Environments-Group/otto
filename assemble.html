@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Otto - Assembly Plan</title>
+    <link rel="stylesheet" href="./styles/main.css">
+    <link rel="stylesheet" href="./styles/assembly.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body class="assembly-page">
+    <header class="assembly-toolbar">
+        <div class="assembly-toolbar__left">
+            <button id="btn-back-editor" class="toolbar-btn" type="button">Back to Editor</button>
+        </div>
+        <div class="assembly-toolbar__center">
+            <h1 class="assembly-title">Assembly Plan</h1>
+            <span class="assembly-subtitle">Version 1</span>
+        </div>
+        <div class="assembly-toolbar__right">
+            <span class="assembly-meta">Thickness: 3 mm</span>
+        </div>
+    </header>
+
+    <main class="assembly-main">
+        <div id="assembly-canvas-container" class="assembly-canvas-container"></div>
+        <div id="assembly-empty" class="assembly-empty is-hidden">
+            <h2>No saved shapes yet</h2>
+            <p>Go back to the editor, add shapes, and autosave will populate this view.</p>
+        </div>
+        <aside id="assembly-controls" class="assembly-controls">
+            <div class="assembly-controls__header">Transform</div>
+            <div class="assembly-controls__row">
+                <span class="assembly-controls__label">Selected</span>
+                <span id="assembly-selected-name" class="assembly-controls__value">None</span>
+            </div>
+        </aside>
+    </main>
+
+    <script type="module" src="./src/assembly/main.js"></script>
+</body>
+</html>

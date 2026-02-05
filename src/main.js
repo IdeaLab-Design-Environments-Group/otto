@@ -1,18 +1,64 @@
+/**
+ * Main Entry Point
+ * 
+ * This is the application bootstrap file that initializes the entire Nova Otto
+ * parametric 2D design system. It sets up the Application instance, connects
+ * UI components, and exposes global APIs for plugins and console usage.
+ * 
+ * @module main
+ */
+
 // Main entry point - Initialize Application
 import { Application } from './core/Application.js';
+import * as Geometry from './geometry/index.js';
 
-// Global application instance
+/**
+ * Global application instance
+ * Exposed for debugging and plugin access
+ * @type {Application|null}
+ */
 let app;
 
+/**
+ * DOMContentLoaded Event Handler
+ * 
+ * Initializes the application once the DOM is fully loaded. This ensures all
+ * required HTML elements are available before creating UI components.
+ * 
+ * Sets up:
+ * - Application instance with all managers and components
+ * - Geometry library initialization (PathKit if available)
+ * - Toolbar button event listeners
+ * - Global window exports for console/plugin access
+ */
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Nova Otto - Parametric 2D Design System');
     
     try {
         // Create and initialize application (Phase 9)
+        // This sets up all core managers, UI components, and connects them
         app = new Application();
         app.init();
+
+        // Expose geometry library for plugins and console usage
+        // This allows plugins and console scripts to access geometry utilities
+        app.geometry = Geometry;
+        if (typeof window !== 'undefined') {
+            // Global exports for external access
+            window.OttoGeometry = Geometry; // Geometry utilities (Vec, Path, etc.)
+            window.OttoCodeRunner = app.codeRunner; // Code execution engine
+            
+            // Initialize PathKit if available (for advanced path operations)
+            // PathKit provides high-performance path manipulation capabilities
+            if (window.PathKitInit || window.PathKit) {
+                Geometry.initCuttleGeometry({
+                    PathKitInit: window.PathKitInit,
+                    PathKit: window.PathKit
+                });
+            }
+        }
         
-        // Setup UI buttons
+        // Setup UI buttons - connects toolbar buttons to application methods
         setupToolbarButtons(app);
         
         console.log('Application initialized successfully');
@@ -32,11 +78,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Setup toolbar button event listeners
- * @param {Application} app 
+ * Setup Toolbar Button Event Listeners
+ * 
+ * Connects all toolbar buttons to their corresponding application methods.
+ * This includes file operations (save/load/export/import), undo/redo,
+ * and tool mode toggles.
+ * 
+ * @param {Application} app - The application instance
  */
 function setupToolbarButtons(app) {
-    // Save button
+    // Save button - saves current scene state to browser storage
     const btnSave = document.getElementById('btn-save');
     if (btnSave) {
         btnSave.addEventListener('click', () => {
@@ -44,7 +95,7 @@ function setupToolbarButtons(app) {
         });
     }
     
-    // Load button
+    // Load button - loads previously saved scene from browser storage
     const btnLoad = document.getElementById('btn-load');
     if (btnLoad) {
         btnLoad.addEventListener('click', async () => {
@@ -57,7 +108,7 @@ function setupToolbarButtons(app) {
         });
     }
     
-    // Export button
+    // Export button - exports current scene to .pds file for file system storage
     const btnExport = document.getElementById('btn-export');
     if (btnExport) {
         btnExport.addEventListener('click', () => {
@@ -65,7 +116,7 @@ function setupToolbarButtons(app) {
         });
     }
     
-    // Import button
+    // Import button - imports a .pds file from file system
     const btnImport = document.getElementById('btn-import');
     if (btnImport) {
         btnImport.addEventListener('click', async () => {
@@ -73,7 +124,7 @@ function setupToolbarButtons(app) {
         });
     }
     
-    // Undo button
+    // Undo button - reverts the last action using command history
     const btnUndo = document.getElementById('btn-undo');
     if (btnUndo) {
         btnUndo.addEventListener('click', () => {
@@ -84,7 +135,7 @@ function setupToolbarButtons(app) {
         updateUndoRedoButtons(app, btnUndo, null);
     }
     
-    // Redo button
+    // Redo button - reapplies the last undone action
     const btnRedo = document.getElementById('btn-redo');
     if (btnRedo) {
         btnRedo.addEventListener('click', () => {
@@ -96,23 +147,68 @@ function setupToolbarButtons(app) {
     }
     
     // Update undo/redo buttons periodically and on history changes
+    // This keeps the UI in sync with command history state
     const updateInterval = setInterval(() => {
         updateUndoRedoButtons(app, btnUndo, btnRedo);
     }, 100);
     
     // Also update when app is available
+    // Expose method for manual UI updates when history changes
     if (app) {
         app.updateUndoRedoUI = function() {
             updateUndoRedoButtons(app, btnUndo, btnRedo);
         };
     }
+
+    // Free draw button - toggles path drawing tool mode
+    // When active, allows drawing freeform paths with bezier curves
+    const btnFreeDraw = document.getElementById('btn-free-draw');
+    if (btnFreeDraw) {
+        let drawActive = false;
+        btnFreeDraw.addEventListener('click', () => {
+            if (!drawActive) {
+                drawActive = true;
+                btnFreeDraw.classList.toggle('active', drawActive);
+                if (app.canvasRenderer) {
+                    app.canvasRenderer.setToolMode('path');
+                }
+                return;
+            }
+
+            if (app.canvasRenderer && app.canvasRenderer.isPathDrawing) {
+                app.canvasRenderer.finishPathDrawing();
+                btnFreeDraw.classList.toggle('active', true);
+                drawActive = true;
+                return;
+            }
+
+            drawActive = false;
+            btnFreeDraw.classList.toggle('active', drawActive);
+            if (app.canvasRenderer) {
+                app.canvasRenderer.setToolMode('select');
+            }
+        });
+    }
+
+    // Assembly plan button - navigates to 3D assembly view
+    // Opens a separate page for visualizing 3D assembly of 2D parts
+    const btnAssembly = document.getElementById('btn-assembly');
+    if (btnAssembly) {
+        btnAssembly.addEventListener('click', () => {
+            window.location.href = './assemble.html';
+        });
+    }
 }
 
 /**
- * Update undo/redo button states
- * @param {Application} app 
- * @param {HTMLElement|null} btnUndo 
- * @param {HTMLElement|null} btnRedo 
+ * Update Undo/Redo Button States
+ * 
+ * Enables/disables undo and redo buttons based on command history state.
+ * Also updates visual styling (opacity, cursor) to reflect availability.
+ * 
+ * @param {Application} app - The application instance
+ * @param {HTMLElement|null} btnUndo - Undo button element
+ * @param {HTMLElement|null} btnRedo - Redo button element
  */
 function updateUndoRedoButtons(app, btnUndo, btnRedo) {
     if (app.sceneHistory) {

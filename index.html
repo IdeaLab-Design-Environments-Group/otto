@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nova Otto - Parametric 2D Design System</title>
     <link rel="stylesheet" href="./styles/main.css">
+    
+    <!-- CodeMirror Dependencies -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/addon/mode/simple.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/addon/comment/comment.min.js"></script>
+
+    <!-- ClipperLib for boolean operations -->
+    <script src="https://cdn.jsdelivr.net/gh/junmer/clipper-lib@master/clipper.js"></script>
 </head>
 <body>
     <!-- Tab Bar Container -->
@@ -30,6 +40,13 @@
             <button id="btn-redo" class="toolbar-btn" title="Redo (Ctrl+Y)">
                 Redo
             </button>
+            <div class="toolbar-separator"></div>
+            <button id="btn-free-draw" class="toolbar-btn" title="Path Tool">
+                Path
+            </button>
+            <button id="btn-assembly" class="toolbar-btn" title="Assembly Plan (3D)">
+                Assembly
+            </button>
         </div>
     </div>
     
@@ -38,9 +55,15 @@
         <!-- Left Panel -->
         <div id="left-panel" class="panel left-panel">
             <div class="panel-header">
-                <h3>Shape Library</h3>
+                <div class="panel-tabs">
+                    <button class="panel-tab active" type="button" data-panel="library">Library</button>
+                    <button class="panel-tab" type="button" data-panel="blocks">Blocks</button>
+                    <button class="panel-tab" type="button" data-panel="code">Code</button>
+                </div>
             </div>
-            <div id="shape-library-container" class="panel-content"></div>
+            <div id="shape-library-container" class="panel-content panel-content-tab" data-panel="library"></div>
+            <div id="blockly-container" class="panel-content panel-content-tab is-hidden" data-panel="blocks"></div>
+            <div id="code-editor-container" class="panel-content panel-content-tab is-hidden" data-panel="code"></div>
         </div>
         
         <!-- Left Resize Handle -->
@@ -70,6 +93,7 @@
         </div>
     </div>
     
+    <script src="https://unpkg.com/blockly/blockly.min.js"></script>
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>
