@@ -1,0 +1,58 @@
+---
+config:
+  layout: elk
+---
+graph TB
+    subgraph "Application Layer"
+        App[Application]
+        TM[TabManager]
+    end
+
+    subgraph "Persistence Managers"
+        SM[StorageManager]
+        FM[FileManager]
+        SER[Serializer]
+    end
+
+    subgraph "Storage Backends"
+        SF[StorageFactory]
+        LSB[LocalStorageBackend]
+        IDB[IndexedDBBackend]
+        CSB[CloudStorageBackend]
+    end
+
+    subgraph "Storage"
+        LS[(LocalStorage)]
+        IDB_DB[(IndexedDB)]
+        Cloud[(Cloud Storage)]
+        File[JSON Files]
+    end
+
+    App --> SM
+    App --> FM
+    SM --> TM
+    FM --> TM
+
+    SM --> SER
+    FM --> SER
+
+    SM --> SF
+    SF --> LSB
+    SF --> IDB
+    SF --> CSB
+
+    LSB --> LS
+    IDB --> IDB_DB
+    CSB --> Cloud
+    FM --> File
+
+    SER -->|Serialize| JSON[JSON Data]
+    JSON -->|Deserialize| SER
+
+    subgraph "Serialization Format"
+        JSON --> TabData[Tab Data]
+        TabData --> SceneData[Scene Data]
+        SceneData --> ShapeData[Shape Data]
+        SceneData --> ParamData[Parameter Data]
+        SceneData --> ViewportData[Viewport Data]
+    end

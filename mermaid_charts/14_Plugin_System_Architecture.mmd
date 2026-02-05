@@ -1,0 +1,53 @@
+graph TB
+    subgraph "Plugin System"
+        PM[PluginManager]
+        PA[PluginAPI]
+
+        subgraph "Plugin Lifecycle"
+            Load[Load Plugin]
+            Init[Initialize]
+            Register[Register Features]
+            Active[Active]
+            Unload[Unload]
+        end
+
+        subgraph "Plugin Capabilities"
+            RS[Register Shapes]
+            RC[Register Commands]
+            RB[Register Bindings]
+            UI[Add UI Elements]
+            Hooks[Register Hooks]
+        end
+    end
+
+    subgraph "Core System"
+        SR[ShapeRegistry]
+        CR_Core[CommandRegistry]
+        BR_Core[BindingRegistry]
+        EB[EventBus]
+        App[Application]
+    end
+
+    PM --> PA
+    PA --> SR
+    PA --> CR_Core
+    PA --> BR_Core
+    PA --> EB
+    PA --> App
+
+    Load --> Init
+    Init --> Register
+    Register --> Active
+    Active --> Unload
+
+    Register --> RS
+    Register --> RC
+    Register --> RB
+    Register --> UI
+    Register --> Hooks
+
+    RS --> SR
+    RC --> CR_Core
+    RB --> BR_Core
+    UI --> App
+    Hooks --> EB

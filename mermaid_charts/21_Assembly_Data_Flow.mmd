@@ -1,0 +1,17 @@
+flowchart LR
+    Autosave[(LocalStorage autosave)] --> Loader[AssemblyDataLoader]
+    Loader --> SceneState[SceneState]
+    SceneState --> ShapeStore[ShapeStore]
+    ShapeStore --> Shapes[Resolved Shapes]
+    ShapeStore --> Joinery[Edge Joinery Metadata]
+
+    Shapes --> Factory[AssemblyPieceFactory]
+    Joinery --> Factory
+    Factory -->|female holes| Extrusion[ExtrudeGeometry]
+
+    Shapes --> Decorator[AssemblyJoineryDecorator]
+    Joinery --> Decorator
+    Decorator -->|male tabs| Meshes[Piece Meshes]
+
+    Extrusion --> Meshes
+    Meshes --> Scene[Three.js Scene]

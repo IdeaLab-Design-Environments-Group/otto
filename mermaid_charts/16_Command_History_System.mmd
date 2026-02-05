@@ -1,0 +1,52 @@
+graph TB
+    subgraph "Command Pattern"
+        CMD[Command Interface]
+
+        subgraph "Concrete Commands"
+            CreateShape[CreateShapeCommand]
+            DeleteShape[DeleteShapeCommand]
+            MoveShape[MoveShapeCommand]
+            UpdateParam[UpdateParameterCommand]
+        end
+
+        CMD -.->|Implements| CreateShape
+        CMD -.->|Implements| DeleteShape
+        CMD -.->|Implements| MoveShape
+        CMD -.->|Implements| UpdateParam
+    end
+
+    subgraph "Command Registry"
+        CR[CommandRegistry]
+        History[Command History]
+        Index[History Index]
+
+        CR --> History
+        CR --> Index
+    end
+
+    subgraph "Memento Pattern"
+        Originator[SceneState]
+        Memento[SceneMemento]
+        Caretaker[SceneHistory]
+
+        Originator -->|createMemento| Memento
+        Memento -->|restoreMemento| Originator
+        Caretaker --> Memento
+    end
+
+    CreateShape --> CR
+    DeleteShape --> CR
+    MoveShape --> CR
+    UpdateParam --> CR
+
+    CR -->|Execute| Originator
+    Originator -->|Save State| Caretaker
+
+    subgraph "User Actions"
+        Undo[Undo Ctrl+Z]
+        Redo[Redo Ctrl+Y]
+    end
+
+    Undo --> Caretaker
+    Redo --> Caretaker
+    Caretaker --> Originator

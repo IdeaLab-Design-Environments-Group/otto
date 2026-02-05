@@ -1,0 +1,62 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+ subgraph CoreLayer["Core Layer"]
+        TM["TabManager"]
+        SS["SceneState"]
+        SH["ShapeStore"]
+        PS["ParameterStore"]
+        BR["BindingResolver"]
+        CMD["CommandRegistry"]
+  end
+ subgraph UILayer["UI Layer"]
+        TB["TabBar"]
+        SL["ShapeLibrary"]
+        CR["CanvasRenderer"]
+        PM_UI["ParametersMenu"]
+        PP["PropertiesPanel"]
+        ZC["ZoomControls"]
+  end
+ subgraph ModelLayer["Model Layer"]
+        SR["ShapeRegistry"]
+        Shapes["Shapes: Circle, Rectangle, Polygon, Star, Line, Path"]
+        Bindings["Bindings System"]
+        Decorators["Shape Decorators"]
+  end
+ subgraph PersistenceLayer["Persistence Layer"]
+        SM["StorageManager"]
+        FM["FileManager"]
+        SER["Serializer"]
+        Backends["Storage Backends"]
+  end
+ subgraph EventSystem["Event System"]
+        EB["EventBus Singleton"]
+  end
+ subgraph PluginSystem["Plugin System"]
+        PM_Plugin["PluginManager"]
+        Plugins["Plugins"]
+  end
+ subgraph OttoV2["Otto v2 Application"]
+        App["Application Facade"]
+        CoreLayer
+        UILayer
+        ModelLayer
+        PersistenceLayer
+        EventSystem
+        PluginSystem
+  end
+    App --> TM & UILayer & SM & FM & PM_Plugin
+    TM --> SS
+    SS --> SH & PS & BR
+    UILayer --> CoreLayer & ModelLayer & EB
+    CoreLayer --> ModelLayer & EB
+    SM --> SER & Backends
+    FM --> SER
+    PM_Plugin --> Plugins
+    Plugins --> SR
+    ModelLayer --> EB
+    User["User Interaction"] --> UILayer
+    Storage["LocalStorage / IndexedDB"] --> Backends
+    Files["JSON Files"] --> FM

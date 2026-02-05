@@ -1,0 +1,176 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    class Shape {
+        <<abstract>>
+        +string id
+        +string type
+        +Position position
+        +Map bindings
+        +getBindableProperties()
+        +setBinding(property, binding)
+        +getBinding(property)
+        +resolve(paramStore, resolver)
+        +render(ctx)
+        +getBounds()
+        +containsPoint(x, y)
+        +clone()
+        +toJSON()
+    }
+
+    class Circle {
+        +number centerX
+        +number centerY
+        +number radius
+        +getBindableProperties()
+        +render(ctx)
+        +getBounds()
+        +containsPoint(x, y)
+    }
+
+    class Rectangle {
+        +number x
+        +number y
+        +number width
+        +number height
+        +getBindableProperties()
+        +render(ctx)
+        +getBounds()
+        +containsPoint(x, y)
+    }
+
+    class Line {
+        +number x1
+        +number y1
+        +number x2
+        +number y2
+        +getBindableProperties()
+        +render(ctx)
+        +getBounds()
+        +containsPoint(x, y)
+    }
+
+    class PathShape {
+        +Point[] points
+        +number strokeWidth
+        +boolean closed
+        +boolean[] curveSegments
+        +getBindableProperties()
+        +render(ctx)
+        +getBounds()
+        +containsPoint(x, y)
+    }
+
+    class ShapeRegistry {
+        <<static>>
+        -Map registry
+        +register(type, createFn, fromJSONFn)
+        +create(type, position, options)
+        +fromJSON(json)
+        +isRegistered(type)
+        +getAvailableTypes()
+    }
+
+    class ShapeBuilder {
+        -string type
+        -string id
+        -Position position
+        -Map properties
+        -Map bindings
+        -Decorator[] decorators
+        +withId(id)
+        +at(x, y)
+        +withProperty(name, value)
+        +withBinding(property, binding)
+        +withDecorator(type, options)
+        +validate()
+        +build()
+    }
+
+    class Binding {
+        <<interface>>
+        +resolve(paramStore, bindingResolver)
+    }
+
+    class ParameterBinding {
+        -string parameterName
+        +resolve(paramStore, bindingResolver)
+    }
+
+    class ExpressionBinding {
+        -string expression
+        -string[] dependencies
+        +resolve(paramStore, bindingResolver)
+    }
+
+    class ProcessedBinding {
+        -Binding sourceBinding
+        -BindingHandler[] handlers
+        +resolve(paramStore, bindingResolver)
+    }
+
+    class BindingHandler {
+        <<interface>>
+        +process(value)
+    }
+
+    class ClampHandler {
+        -number min
+        -number max
+        +process(value)
+    }
+
+    class RoundHandler {
+        -number decimals
+        +process(value)
+    }
+
+    class ShapeDecorator {
+        <<abstract>>
+        -Shape wrappedShape
+        +render(ctx)
+    }
+
+    class FillDecorator {
+        -string color
+        +render(ctx)
+    }
+
+    class BorderDecorator {
+        -string color
+        -number width
+        +render(ctx)
+    }
+
+    class ShadowDecorator {
+        -number blur
+        -string color
+        +render(ctx)
+    }
+
+    Shape <|-- Circle
+    Shape <|-- Rectangle
+    Shape <|-- Line
+    Shape <|-- PathShape
+    Shape --> Binding
+
+    Binding <|.. ParameterBinding
+    Binding <|.. ExpressionBinding
+    Binding <|.. ProcessedBinding
+
+    ProcessedBinding --> Binding
+    ProcessedBinding --> BindingHandler
+
+    BindingHandler <|.. ClampHandler
+    BindingHandler <|.. RoundHandler
+
+    ShapeRegistry ..> Shape : creates
+    ShapeBuilder ..> Shape : builds
+    ShapeBuilder --> ShapeRegistry
+
+    ShapeDecorator <|-- FillDecorator
+    ShapeDecorator <|-- BorderDecorator
+    ShapeDecorator <|-- ShadowDecorator
+    ShapeDecorator --> Shape : wraps

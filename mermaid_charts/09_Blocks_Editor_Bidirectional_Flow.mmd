@@ -1,0 +1,27 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+  subgraph BlocksUI["Blocks Editor UI (Blockly)"]
+    BE["BlocksEditor"]
+    WS["Blockly Workspace"]
+  end
+
+  subgraph CanvasUI["Canvas UI"]
+    CR["CanvasRenderer"]
+  end
+
+  subgraph Core["Core/Data"]
+    SS["ShapeStore"]
+    SR["ShapeRegistry"]
+    EB["EventBus"]
+  end
+
+  WS --> BE
+  BE -->|run blocks| SR
+  SR -->|create shape| SS
+  SS -->|emit SHAPE_ADDED| EB
+  EB -->|notify| CR
+  EB -->|notify| BE
+  BE -->|add block for new shape| WS

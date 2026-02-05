@@ -1,0 +1,32 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+  subgraph Editors["Editors"]
+    CE["CodeEditor"]
+    BE["BlocksEditor"]
+  end
+
+  subgraph Connector["EditorSyncConnector (Mediator)"]
+    ESC["Sync Mediator"]
+  end
+
+  subgraph Core["Core & Runtime"]
+    CR["CodeRunner"]
+    SS["ShapeStore / ParameterStore"]
+    EB["EventBus"]
+    Canvas["CanvasRenderer"]
+  end
+
+  CE <-->|CODE_UPDATED / CODE_EXECUTED| ESC
+  BE <-->|BLOCKS_UPDATED / BLOCKS_EXECUTED| ESC
+  ESC -->|syncFromCode| BE
+  ESC -->|setCode no run| CE
+
+  CE -->|Run| CR
+  BE -->|Run| CR
+  CR --> SS
+  SS --> EB
+  EB --> Canvas
+  EB --> CE

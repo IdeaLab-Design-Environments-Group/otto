@@ -1,0 +1,29 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    [*] --> Created: new Component()
+    Created --> Mounted: mount()
+    Mounted --> Rendered: render()
+    Rendered --> Updated: state change
+    Updated --> Rendered: render()
+    Rendered --> Unmounted: unmount()
+    Unmounted --> [*]
+
+    note right of Mounted
+        - Attach to DOM
+        - Subscribe to events
+        - Initialize state
+    end note
+
+    note right of Rendered
+        - Update DOM
+        - Reflect current state
+    end note
+
+    note right of Unmounted
+        - Clean up listeners
+        - Remove from DOM
+        - Release resources
+    end note

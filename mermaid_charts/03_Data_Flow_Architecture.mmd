@@ -1,0 +1,48 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+    User[User Action] --> UI[UI Component]
+
+    UI --> |Create Shape| DDM[DragDropManager]
+    UI --> |Select Shape| CR[CanvasRenderer]
+    UI --> |Edit Parameter| PM[ParametersMenu]
+    UI --> |Modify Property| PP[PropertiesPanel]
+
+    DDM --> SR[ShapeRegistry]
+    SR --> |Create Instance| Shape[Shape Object]
+    Shape --> SH[ShapeStore]
+
+    SH --> |Emit Event| EB[EventBus]
+    PM --> PS[ParameterStore]
+    PS --> |Emit Event| EB
+
+    PP --> |Update Binding| Shape
+    Shape --> |Set Binding| Binding[Binding Object]
+
+    EB --> |Notify| UI
+    EB --> |Notify| CR
+    EB --> |Create Snapshot| History[SceneHistory]
+
+    subgraph "Rendering Pipeline"
+        CR --> BR[BindingResolver]
+        BR --> PS
+        BR --> |Resolve Values| ResolvedShapes[Resolved Shapes]
+        ResolvedShapes --> Canvas[HTML Canvas]
+    end
+
+    subgraph "Persistence Flow"
+        SH --> Serializer
+        PS --> Serializer
+        Serializer --> |JSON| StorageBackend[Storage Backend]
+        StorageBackend --> |Save| DB[(Storage)]
+        DB --> |Load| StorageBackend
+        StorageBackend --> |JSON| Serializer
+        Serializer --> |Restore| SH
+        Serializer --> |Restore| PS
+    end
+
+    History --> |Memento| SceneState[SceneState]
+    SceneState --> |Undo/Redo| SH
+    SceneState --> |Undo/Redo| PS

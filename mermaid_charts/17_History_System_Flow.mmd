@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant User
+    participant App
+    participant History as SceneHistory
+    participant Scene as SceneState
+    participant Store as ShapeStore/ParameterStore
+
+    User->>App: Perform Action (Add Shape)
+    App->>Store: add(shape)
+    Store->>EventBus: emit(SHAPE_ADDED)
+    EventBus->>App: notify
+    App->>Scene: createMemento()
+    Scene->>Scene: serialize state
+    Scene-->>App: SceneMemento
+    App->>History: push(memento)
+
+    Note over History: Stack: [M1, M2, M3]<br/>Index: 2
+
+    User->>App: Undo (Ctrl+Z)
+    App->>History: undo()
+    History-->>App: previous memento (M2)
+    App->>Scene: restoreMemento(M2)
+    Scene->>Store: restore shapes
+    Scene->>Store: restore parameters
+    Store->>EventBus: emit events
+    EventBus->>UI: update components
+
+    Note over History: Stack: [M1, M2, M3]<br/>Index: 1
+
+    User->>App: Redo (Ctrl+Y)
+    App->>History: redo()
+    History-->>App: next memento (M3)
+    App->>Scene: restoreMemento(M3)
+    Scene->>Store: restore shapes
+    Scene->>Store: restore parameters
+    Store->>EventBus: emit events
+
+    Note over History: Stack: [M1, M2, M3]<br/>Index: 2

@@ -1,0 +1,71 @@
+---
+config:
+  layout: elk
+---
+
+graph TB
+    subgraph "Base Component"
+        Component[Component Base Class]
+        Component -->|Abstract Methods| mount
+        Component -->|Abstract Methods| unmount
+        Component -->|Abstract Methods| render
+    end
+
+    subgraph "UI Components"
+        TB[TabBar]
+        SL[ShapeLibrary]
+        CR[CanvasRenderer]
+        EJM[EdgeJoineryMenu]
+        PM[ParametersMenu]
+        PP[PropertiesPanel]
+        ZC[ZoomControls]
+        BE[BlocksEditor]
+    end
+
+    subgraph "Core State"
+        TM[TabManager]
+        SS[SceneState]
+        SR[ShapeRegistry]
+    end
+
+    Component -.->|Extends| TB
+    Component -.->|Extends| SL
+    Component -.->|Extends| PM
+    Component -.->|Extends| PP
+    Component -.->|Extends| ZC
+    Component -.->|Extends| BE
+    Component -.->|Extends| EJM
+
+    TB --> TM
+    TB -->|Subscribe| EB[EventBus]
+
+    SL --> SR
+    SL -->|Drag & Drop| DDM[DragDropManager]
+
+    CR --> SS
+    CR --> BR[BindingResolver]
+    CR -->|Subscribe| EB
+    CR --> EJM
+
+    BE -->|Create shapes| SR
+    BE -->|Subscribe| EB
+
+    PM --> PS[ParameterStore]
+    PM -->|Subscribe| EB
+
+    PP --> SH[ShapeStore]
+    PP --> PS
+    PP -->|Subscribe| EB
+
+    ZC --> Viewport
+    ZC -->|Subscribe| EB
+
+    subgraph "Interaction Layer"
+        DDM --> SH
+        DDM --> SR
+        Mouse[Mouse Events]
+        Keyboard[Keyboard Events]
+    end
+
+    CR -->|Canvas Events| Mouse
+    App[Application] -->|Shortcuts| Keyboard

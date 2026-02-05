@@ -1,0 +1,31 @@
+flowchart TB
+    Start[Shape with Bindings] --> BR[BindingResolver]
+    BR --> Check{Has Binding?}
+
+    Check -->|Yes| GetBinding[Get Binding]
+    Check -->|No| UseDefault[Use Default Value]
+
+    GetBinding --> Type{Binding Type?}
+
+    Type -->|Parameter| PB[ParameterBinding]
+    Type -->|Expression| EB[ExpressionBinding]
+    Type -->|Processed| PRB[ProcessedBinding]
+
+    PB --> PS[Get from ParameterStore]
+    EB --> Eval[Evaluate Expression]
+    PRB --> SB[Resolve Source Binding]
+
+    Eval --> Deps[Get Dependencies from ParameterStore]
+    Deps --> Calc[Calculate Result]
+
+    SB --> Handlers[Apply Handlers Chain]
+    Handlers --> Clamp[ClampHandler]
+    Clamp --> Round[RoundHandler]
+    Round --> Final
+
+    PS --> Final[Final Value]
+    Calc --> Final
+    UseDefault --> Final
+
+    Final --> ResolvedShape[Resolved Shape]
+    ResolvedShape --> Render[Render to Canvas]

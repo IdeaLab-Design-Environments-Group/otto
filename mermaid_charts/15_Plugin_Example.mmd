@@ -1,0 +1,47 @@
+classDiagram
+    class Plugin {
+        <<abstract>>
+        +string name
+        +string version
+        +string[] dependencies
+        +init(api)
+        +destroy()
+    }
+
+    class PluginAPI {
+        -Application app
+        -ShapeRegistry shapeRegistry
+        -CommandRegistry commandRegistry
+        -BindingRegistry bindingRegistry
+        -EventBus eventBus
+        +registerShape(type, createFn, fromJSONFn)
+        +registerCommand(name, CommandClass)
+        +registerBinding(type, BindingClass)
+        +subscribeEvent(event, callback)
+        +addMenuItem(config)
+        +addToolbarButton(config)
+    }
+
+    class PluginManager {
+        -Plugin[] plugins
+        -PluginAPI api
+        +register(plugin)
+        +load(pluginId)
+        +unload(pluginId)
+        +getPlugin(pluginId)
+        +getAllPlugins()
+    }
+
+    class CustomShapePlugin {
+        +string name
+        +init(api)
+        +destroy()
+        -registerTriangle()
+        -registerPentagon()
+    }
+
+    PluginManager --> PluginAPI
+    PluginManager --> Plugin
+    Plugin <|-- CustomShapePlugin
+    PluginAPI --> ShapeRegistry
+    PluginAPI --> CommandRegistry

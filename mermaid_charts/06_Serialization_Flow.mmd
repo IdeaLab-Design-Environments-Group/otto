@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant App
+    participant SM as StorageManager
+    participant SER as Serializer
+    participant Backend as StorageBackend
+    participant Storage as Storage
+
+    App->>SM: save()
+    SM->>SER: serialize(tabManager)
+    SER->>SER: toJSON(tabs, scenes, shapes, params)
+    SER-->>SM: JSON data
+    SM->>Backend: save(key, data)
+    Backend->>Storage: write
+    Storage-->>Backend: success
+    Backend-->>SM: success
+    SM-->>App: true
+
+    App->>SM: load()
+    SM->>Backend: load(key)
+    Backend->>Storage: read
+    Storage-->>Backend: JSON data
+    Backend-->>SM: JSON data
+    SM->>SER: deserialize(data)
+    SER->>SER: fromJSON(data)
+    SER-->>SM: TabManager instance
+    SM-->>App: TabManager

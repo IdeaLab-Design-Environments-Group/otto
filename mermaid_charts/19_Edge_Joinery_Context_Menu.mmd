@@ -1,0 +1,7 @@
+flowchart LR
+    User["User"] -->|"Right-click edge"| CR["CanvasRenderer"]
+    CR -->|"Hit test edge"| EJM["EdgeJoineryMenu"]
+    EJM -->|"Apply joinery params"| SS["ShapeStore"]
+    SS -->|"EDGE_JOINERY_CHANGED"| EB["EventBus"]
+    EB -->|"notify"| CR
+    CR -->|"renderEdgeJoinery()"| Canvas["Canvas"]

@@ -1,0 +1,44 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+    subgraph GeometryLayer["Geometry Layer (src/geometry/edge/)"]
+        Edge["Edge Class"]
+        EdgeSelection["EdgeSelection"]
+        EdgeHitTest["EdgeHitTest"]
+        EdgeHighlight["EdgeHighlight"]
+        EdgeHelpers["edgeHelpers"]
+    end
+
+    subgraph CoreLayer["Core Layer"]
+        ShapeStore["ShapeStore"]
+        EventBus["EventBus"]
+    end
+
+    subgraph UILayer["UI Layer"]
+        CanvasRenderer["CanvasRenderer"]
+        PropertiesPanel["PropertiesPanel"]
+    end
+
+    Edge --> EdgeSelection
+    EdgeHelpers --> Edge
+    EdgeHitTest --> Edge
+    EdgeHighlight --> Edge
+
+    ShapeStore --> EdgeSelection
+    ShapeStore --> EventBus
+
+    CanvasRenderer --> EdgeHitTest
+    CanvasRenderer --> EdgeHighlight
+    CanvasRenderer --> EventBus
+
+    PropertiesPanel --> ShapeStore
+    PropertiesPanel --> EventBus
+
+    User["User Interaction"] --> CanvasRenderer
+    CanvasRenderer -->|"hitTestEdge()"| EdgeHitTest
+    EdgeHitTest -->|"Edge found"| ShapeStore
+    ShapeStore -->|"EDGE_SELECTED"| EventBus
+    EventBus -->|"notify"| CanvasRenderer
+    EventBus -->|"notify"| PropertiesPanel

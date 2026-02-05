@@ -1,0 +1,16 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+  Canvas["CanvasRenderer"]
+  Handles["Corner Handles"]
+  Strategy["ShapeResizeStrategies (Strategy)"]
+  Shape["Shape Instance"]
+  Bus["EventBus"]
+
+  Canvas -->|hit test| Handles
+  Handles -->|start resize| Canvas
+  Canvas -->|select strategy| Strategy
+  Strategy -->|apply bounds| Shape
+  Canvas -->|PARAM_CHANGED| Bus

@@ -1,0 +1,111 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    class Application {
+        -TabManager tabManager
+        -StorageManager storageManager
+        -FileManager fileManager
+        -SceneHistory sceneHistory
+        -SceneState currentSceneState
+        -CanvasRenderer canvasRenderer
+        -ShapeLibrary shapeLibrary
+        -ParametersMenu parametersMenu
+        -PropertiesPanel propertiesPanel
+        -TabBar tabBar
+        -ZoomControls zoomControls
+        -DragDropManager dragDropManager
+        +init()
+        +save()
+        +load()
+        +undo()
+        +redo()
+        +newTab()
+        +exportFile()
+        +importFile()
+    }
+
+    class TabManager {
+        -Tab[] tabs
+        -string activeTabId
+        -EventBus eventBus
+        +createTab(name)
+        +closeTab(id)
+        +switchTab(id)
+        +getActiveTab()
+        +getActiveScene()
+        +getAllTabs()
+    }
+
+    class Tab {
+        +string id
+        +string name
+        +SceneState sceneState
+    }
+
+    class SceneState {
+        -ShapeStore shapeStore
+        -ParameterStore parameterStore
+        -BindingResolver bindingResolver
+        -Viewport viewport
+        +createMemento()
+        +restoreMemento()
+        +toJSON()
+        +fromJSON()
+    }
+
+    class ShapeStore {
+        -Map shapes
+        -ParameterStore parameterStore
+        -BindingResolver bindingResolver
+        -Set selectedShapeIds
+        -EventBus eventBus
+        +add(shape)
+        +remove(id)
+        +get(id)
+        +getAll()
+        +getResolved()
+        +setSelected(id)
+        +selectAll()
+    }
+
+    class ParameterStore {
+        -Map parameters
+        -EventBus eventBus
+        +add(name, value)
+        +remove(name)
+        +get(name)
+        +set(name, value)
+        +getAll()
+        +has(name)
+    }
+
+    class BindingResolver {
+        -ParameterStore parameterStore
+        +resolve(shape)
+        +resolveAll(shapes)
+        +resolveBinding(binding)
+    }
+
+    class CommandRegistry {
+        -Map registry
+        -Command[] history
+        -int historyIndex
+        +register(name, CommandClass)
+        +execute(name, args)
+        +undo()
+        +redo()
+    }
+
+    Application "1" --> "1" TabManager
+    Application "1" --> "1" StorageManager
+    Application "1" --> "1" FileManager
+    TabManager "1" --> "*" Tab
+    Tab "1" --> "1" SceneState
+    SceneState "1" --> "1" ShapeStore
+    SceneState "1" --> "1" ParameterStore
+    SceneState "1" --> "1" BindingResolver
+    ShapeStore --> ParameterStore
+    ShapeStore --> BindingResolver
+    BindingResolver --> ParameterStore

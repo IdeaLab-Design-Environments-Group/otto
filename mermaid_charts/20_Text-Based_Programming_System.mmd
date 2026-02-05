@@ -1,0 +1,17 @@
+flowchart LR
+    subgraph Programming["Programming Module"]
+        Lexer["Lexer"]
+        Parser["Parser"]
+        AST["AST"]
+        Interpreter["Interpreter"]
+        Visitors["Visitors"]
+        Environment["Environment"]
+    end
+    
+    Code["Source Code"] --> Lexer
+    Lexer --> |Tokens| Parser
+    Parser --> AST
+    AST --> Interpreter
+    Interpreter --> Visitors
+    Visitors --> Environment
+    Environment --> |Shapes/Params| Result["Result"]
