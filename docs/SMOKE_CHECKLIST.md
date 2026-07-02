@@ -1,0 +1,80 @@
+# Otto Manual Smoke Checklist
+
+Run after every refactor phase (and every Phase-2 sub-step). Serve the repo
+root over HTTP (`npm run serve` → http://localhost:8080) — ES modules do not
+load from `file://`.
+
+For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
+(Ctrl/Cmd+Y)** and confirm the scene returns to the expected state.
+
+## Shape creation
+- [ ] Drag each of the 18 shapes from the Shape Library onto the canvas:
+      circle, line, rectangle, path (via free-draw), polygon, star, triangle,
+      ellipse, arc, roundedrectangle, donut, cross, gear, spiral, wave, slot,
+      arrow, chamferrectangle
+- [ ] Each renders at the drop position and appears in the Properties panel layer list
+
+## Selection
+- [ ] Click selects a single shape (brackets + dimension labels appear)
+- [ ] Shift-click adds/removes from selection
+- [ ] Marquee (drag on empty canvas) selects contained shapes
+- [ ] Ctrl/Cmd+A selects all; Escape / empty click deselects
+- [ ] Properties panel follows the selection
+
+## Manipulation
+- [ ] Drag moves a shape (and a multi-selection moves together)
+- [ ] Arrow keys nudge the selection
+- [ ] Corner handles resize each shape type sensibly
+- [ ] Rotation handle rotates; angle shows during drag
+- [ ] Ctrl/Cmd+D duplicates; Delete removes
+- [ ] Path tool: click to add points, drag for curves, close the path, then
+      edit bezier handles on the finished path
+
+## Edges & joinery
+- [ ] Edge selection mode: hovering highlights individual edges
+- [ ] Right-click an edge opens the joinery menu
+- [ ] Apply finger male/female (thickness + finger count); preview draws on the edge
+- [ ] Joinery survives save/reload
+
+## Viewport
+- [ ] Mouse wheel zooms around the cursor; right-drag pans
+- [ ] Zoom controls (+/−/reset) work; rulers and grid stay aligned in mm
+
+## Parameters & bindings
+- [ ] Add a parameter; slider changes propagate to bound shapes live
+- [ ] Bind a shape property to a parameter from the Properties panel
+- [ ] Expression binding (e.g. `size * 2`) evaluates and updates
+- [ ] Rename a parameter / change min/max/step — bindings keep working
+
+## Tabs
+- [ ] New tab creates an empty scene; shapes/params are per-tab
+- [ ] Switch tabs — canvas, panels, and editors all follow
+- [ ] Rename and close tabs
+
+## Persistence
+- [ ] Ctrl/Cmd+S saves; reload restores everything (shapes, bindings, joinery, viewport, tabs)
+- [ ] Export `.pds`, clear, re-import — scene identical
+- [ ] Autosave restores after a hard reload without manual save
+
+## Code & blocks editors
+- [ ] Run an AQUI script (params + shapes + transform + boolean op + for-loop + draw/turtle)
+- [ ] Canvas shows results; shapes appear in the panel
+- [ ] Blocks editor: build a shape with prop blocks, run — canvas updates
+- [ ] Code → Blocks sync (edit code, blocks rebuild) and Blocks → Code
+- [ ] Adding a shape on canvas adds a block
+
+## Undo/redo (global)
+- [ ] Undo/redo across a mixed session (create → move → bind → param change →
+      code run → delete) behaves predictably at every step
+
+## 3D view
+- [ ] Open the 3D view — every canvas shape appears extruded
+- [ ] Joinery: male tabs and female holes visible on jointed edges
+- [ ] Orbit works; back navigation returns to the editor
+- [ ] (Post-Phase 4) Per-shape depth/z reflected in extrusion and elevation
+- [ ] (Post-Phase 5) Live sync: canvas edits update the 3D panel without reload
+
+## Accessibility (post-Phase 7)
+- [ ] Complete the core flow keyboard-only (no mouse)
+- [ ] Focus rings visible on every interactive element
+- [ ] VoiceOver announces toolbar buttons, tabs, shape library items, selection changes

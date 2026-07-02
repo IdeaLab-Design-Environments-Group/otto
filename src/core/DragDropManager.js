@@ -28,6 +28,7 @@
  * @module core/DragDropManager
  */
 import EventBus from '../events/EventBus.js';
+import { AddShapeCommand } from '../commands/shapeCommands.js';
 
 export class DragDropManager {
     /**
@@ -43,9 +44,15 @@ export class DragDropManager {
      * @param {ShapeRegistry}     shapeRegistry  The factory responsible for
      *     instantiating shape objects by their type string (e.g. "circle").
      */
-    constructor(canvas, shapeStore, shapeRegistry) {
+    constructor(canvas, context, shapeRegistry) {
         this.canvas = canvas;
-        this.shapeStore = shapeStore;
+        /**
+         * SceneContext — resolves the ACTIVE tab's shape store lazily, so
+         * drops always land in the current scene without re-wiring on tab
+         * switches.
+         * @type {import('./SceneContext.js').SceneContext}
+         */
+        this.context = context;
         this.shapeRegistry = shapeRegistry;
         /**
          * The parent DOM element of the canvas.  Used as a secondary drop
@@ -335,19 +342,16 @@ export class DragDropManager {
                 }
                 
                 // Create new shape at drop position using ShapeRegistry
-                const shape = this.shapeRegistry.create(data.shapeType, { 
-                    x: worldPos.x, 
-                    y: worldPos.y 
-                }, {}, this.shapeStore);
-                
+                const shape = this.shapeRegistry.create(data.shapeType, {
+                    x: worldPos.x,
+                    y: worldPos.y
+                }, {}, this.context.shapeStore);
+
                 console.log('Created shape:', shape);
-                
-                // Add shape to store (will emit SHAPE_ADDED event)
-                this.shapeStore.add(shape);
-                
-                // Select the new shape
-                this.shapeStore.setSelected(shape.id);
-                
+
+                // Add via the undoable command (adds + selects + records).
+                this.context.history.execute(new AddShapeCommand(shape));
+
                 console.log('Shape added and selected successfully');
             } else {
                 console.warn('DragDropManager: Invalid drop data:', data);

@@ -6,6 +6,7 @@
 import { Component } from './Component.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { CodeRunner } from '../programming/CodeRunner.js';
+import { ReplaceSceneCommand } from '../commands/sceneCommands.js';
 import { Lexer } from '../programming/Lexer.js';
 import { Parser } from '../programming/Parser.js';
 
@@ -110,12 +111,18 @@ const TOOLBOX_XML = `
 `;
 
 export class BlocksEditor extends Component {
-    constructor(container, shapeRegistry, shapeStore, parameterStore, canvasRenderer) {
+    constructor(container, shapeRegistry, shapeStore, parameterStore, viewportController, context = null) {
         super(container);
         this.shapeRegistry = shapeRegistry;
         this.shapeStore = shapeStore;
         this.parameterStore = parameterStore;
-        this.canvasRenderer = canvasRenderer;
+        this.viewportController = viewportController;
+        /**
+         * SceneContext — wraps a blocks run in one undoable
+         * ReplaceSceneCommand. Optional.
+         * @type {?import('../core/SceneContext.js').SceneContext}
+         */
+        this.context = context;
         this.codeRunner = new CodeRunner({ shapeStore, parameterStore });
         this.workspace = null;
         this._blocksDefined = false;
@@ -167,9 +174,7 @@ export class BlocksEditor extends Component {
         this.initBlockly(workspaceDiv);
         
         // Setup bidirectional sync after workspace is initialized
-        if (this.canvasRenderer) {
-            this.setupCanvasSync();
-        }
+        this.setupCanvasSync();
     }
 
     setShapeStore(shapeStore) {
@@ -186,11 +191,6 @@ export class BlocksEditor extends Component {
         }
     }
 
-    setCanvasRenderer(canvasRenderer) {
-        this.canvasRenderer = canvasRenderer;
-        // Setup bidirectional connection
-        this.setupCanvasSync();
-    }
 
     setCodeChangeHandler(handler) {
         this._codeChangeHandler = typeof handler === 'function' ? handler : null;
@@ -1097,13 +1097,13 @@ export class BlocksEditor extends Component {
     }
 
     getDefaultCenter() {
-        if (!this.canvasRenderer) {
+        if (!this.viewportController) {
             return { x: 0, y: 0 };
         }
 
-        const width = this.canvasRenderer.cssWidth || this.canvasRenderer.canvas.width;
-        const height = this.canvasRenderer.cssHeight || this.canvasRenderer.canvas.height;
-        return this.canvasRenderer.screenToWorld(width / 2, height / 2);
+        const width = this.viewportController.cssWidth || window.innerWidth;
+        const height = this.viewportController.cssHeight || window.innerHeight;
+        return this.viewportController.screenToWorld(width / 2, height / 2);
     }
 
     runBlocks() {
@@ -1116,6 +1116,12 @@ export class BlocksEditor extends Component {
         }
 
         const code = this.blocksToCode(blocks);
+
+        // Wrap the rebuild in one undoable ReplaceSceneCommand.
+        const command = this.context
+            ? new ReplaceSceneCommand('Run blocks', this.context.scene)
+            : null;
+
         this._suppressShapeEvents = true;
         const result = this.codeRunner.run(code, {
             clearShapes: true,
@@ -1123,11 +1129,16 @@ export class BlocksEditor extends Component {
         });
         this._suppressShapeEvents = false;
 
+        if (command && result?.success) {
+            command.captureAfter(this.context.scene);
+            if (!command.isNoop()) {
+                this.context.history.record(command);
+            }
+        }
+
         EventBus.emit(EVENTS.BLOCKS_EXECUTED, { code, result });
 
-        if (result && result.success && this.canvasRenderer) {
-            this.canvasRenderer.requestRender();
-        }
+        // Canvas repaints via the SHAPE_ADDED/REMOVED events the run emitted.
     }
 
     clearBlocks() {

@@ -60,35 +60,14 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Donut extends Shape {
-    /**
-     * @param {string}         id            - Unique shape identifier (e.g. "Donut 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]       - X coordinate of the donut centre.
-     * @param {number}         [centerY=0]       - Y coordinate of the donut centre.
-     * @param {number}         [outerRadius=25]  - Radius of the outer circle.
-     * @param {number}         [innerRadius=12.5]- Radius of the inner circle (the hole).
-     *        Must be less than outerRadius to produce a visible ring.
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, outerRadius = 25, innerRadius = 12.5) {
-        super(id, 'donut', position);
-        /** @type {number} X coordinate of the donut centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the donut centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Outer circle radius. Bindable. */
-        this.outerRadius = outerRadius;
-        /** @type {number} Inner circle radius (hole boundary). Bindable. */
-        this.innerRadius = innerRadius;
-    }
+    static type = 'donut';
 
-    /**
-     * Declares which Donut properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'outerRadius', 'innerRadius']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'outerRadius', 'innerRadius'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        outerRadius: { type: 'number', default: 25, bindable: true, min: 0, label: 'Outer Radius', aliases: ['outer_radius'] },
+        innerRadius: { type: 'number', default: 12.5, bindable: true, min: 0, label: 'Inner Radius', aliases: ['inner_radius'] }
+    };
 
     /**
      * Compute the AABB analytically.  For a circle (and therefore for the outer boundary
@@ -232,43 +211,5 @@ export class Donut extends Shape {
         });
 
         return points;
-    }
-
-    /**
-     * Deep-copy this Donut, including all active bindings.
-     * @returns {Donut} A new Donut value-equal to this one.
-     */
-    clone() {
-        const d = new Donut(this.id, { ...this.position }, this.centerX, this.centerY, this.outerRadius, this.innerRadius);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                d.setBinding(property, this.bindings[property]);
-            }
-        });
-        return d;
-    }
-
-    /**
-     * Reconstruct a Donut from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json              - Serialized shape object.
-     * @param {string} json.id           - Shape identifier.
-     * @param {Object} [json.position]   - Legacy position.
-     * @param {number} [json.centerX]    - Serialized centre X.
-     * @param {number} [json.centerY]    - Serialized centre Y.
-     * @param {number} [json.outerRadius]- Serialized outer radius.
-     * @param {number} [json.innerRadius]- Serialized inner radius.
-     * @returns {Donut} A new Donut with geometry restored.
-     */
-    static fromJSON(json) {
-        return new Donut(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.outerRadius || 50,
-            json.innerRadius || 25
-        );
     }
 }

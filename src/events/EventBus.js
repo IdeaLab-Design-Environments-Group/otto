@@ -124,6 +124,7 @@ class EventBus {
         PARAM_CHANGED: 'PARAM_CHANGED',
         PARAM_ADDED: 'PARAM_ADDED',
         PARAM_REMOVED: 'PARAM_REMOVED',
+        PARAM_UPDATED: 'PARAM_UPDATED',
         SHAPE_ADDED: 'SHAPE_ADDED',
         SHAPE_REMOVED: 'SHAPE_REMOVED',
         SHAPE_MOVED: 'SHAPE_MOVED',
@@ -152,7 +153,16 @@ class EventBus {
         CODE_EXECUTED: 'CODE_EXECUTED',
         CODE_UPDATED: 'CODE_UPDATED',
         BLOCKS_EXECUTED: 'BLOCKS_EXECUTED',
-        BLOCKS_UPDATED: 'BLOCKS_UPDATED'
+        BLOCKS_UPDATED: 'BLOCKS_UPDATED',
+        // Drag & drop / palette ghost events (previously off-catalogue strings)
+        SHAPE_DRAG_START: 'SHAPE_DRAG_START',
+        SHAPE_DRAG_END: 'SHAPE_DRAG_END',
+        DRAG_PREVIEW_UPDATE: 'DRAG_PREVIEW_UPDATE',
+        DRAG_PREVIEW_CLEAR: 'DRAG_PREVIEW_CLEAR',
+        // Canvas tool state
+        TOOL_CHANGED: 'TOOL_CHANGED',
+        // Command history state (undo/redo availability)
+        HISTORY_CHANGED: 'HISTORY_CHANGED'
     };
 
     /**

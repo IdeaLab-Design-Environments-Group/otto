@@ -40,36 +40,14 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Cross extends Shape {
-    /**
-     * @param {string}         id          - Unique shape identifier (e.g. "Cross 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]     - X coordinate of the cross centre.
-     * @param {number}         [centerY=0]     - Y coordinate of the cross centre.
-     * @param {number}         [width=50]      - Total arm span (tip to tip, same in both
-     *        directions because the cross is symmetric).
-     * @param {number}         [thickness=10]  - Width of each arm (perpendicular to its
-     *        length direction).
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, width = 50, thickness = 10) {
-        super(id, 'cross', position);
-        /** @type {number} X coordinate of the cross centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the cross centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Total arm span (tip-to-tip). Bindable. */
-        this.width = width;
-        /** @type {number} Arm thickness (perpendicular width of each bar). Bindable. */
-        this.thickness = thickness;
-    }
+    static type = 'cross';
 
-    /**
-     * Declares which Cross properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'width', 'thickness']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'width', 'thickness'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        width: { type: 'number', default: 50, bindable: true, min: 0, label: 'Width' },
+        thickness: { type: 'number', default: 10, bindable: true, min: 0, label: 'Thickness' }
+    };
 
     /**
      * Compute the AABB by delegating to the geometry path.
@@ -191,43 +169,5 @@ export class Cross extends Shape {
             { x: cx - w, y: cy - t },
             { x: cx - t, y: cy - t }
         ];
-    }
-
-    /**
-     * Deep-copy this Cross, including all active bindings.
-     * @returns {Cross} A new Cross value-equal to this one.
-     */
-    clone() {
-        const c = new Cross(this.id, { ...this.position }, this.centerX, this.centerY, this.width, this.thickness);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                c.setBinding(property, this.bindings[property]);
-            }
-        });
-        return c;
-    }
-
-    /**
-     * Reconstruct a Cross from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json            - Serialized shape object.
-     * @param {string} json.id         - Shape identifier.
-     * @param {Object} [json.position] - Legacy position.
-     * @param {number} [json.centerX]  - Serialized centre X.
-     * @param {number} [json.centerY]  - Serialized centre Y.
-     * @param {number} [json.width]    - Serialized arm span.
-     * @param {number} [json.thickness]- Serialized arm thickness.
-     * @returns {Cross} A new Cross with geometry restored.
-     */
-    static fromJSON(json) {
-        return new Cross(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.width || 100,
-            json.thickness || 20
-        );
     }
 }

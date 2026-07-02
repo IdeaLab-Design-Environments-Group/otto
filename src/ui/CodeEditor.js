@@ -7,19 +7,24 @@
 import { Component } from './Component.js';
 import { CodeRunner } from '../programming/CodeRunner.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
+import { ReplaceSceneCommand } from '../commands/sceneCommands.js';
 
 export class CodeEditor extends Component {
     /**
      * @param {HTMLElement} container
      * @param {import('../core/ShapeStore.js').ShapeStore} shapeStore
      * @param {import('../core/ParameterStore.js').ParameterStore} parameterStore
-     * @param {import('./CanvasRenderer.js').CanvasRenderer} canvasRenderer
      */
-    constructor(container, shapeStore, parameterStore, canvasRenderer) {
+    constructor(container, shapeStore, parameterStore, context = null) {
         super(container);
         this.shapeStore = shapeStore;
         this.parameterStore = parameterStore;
-        this.canvasRenderer = canvasRenderer;
+        /**
+         * SceneContext — used to wrap a code run in one undoable
+         * ReplaceSceneCommand. Optional; runs still work without it.
+         * @type {?import('../core/SceneContext.js').SceneContext}
+         */
+        this.context = context;
         this.codeRunner = new CodeRunner({ shapeStore, parameterStore });
         
         this.editor = null; // CodeMirror instance
@@ -412,13 +417,25 @@ export class CodeEditor extends Component {
         }
 
         this.showOutput('Running...', 'info');
-        
+
         try {
+            // Wrap the whole rebuild in one undoable ReplaceSceneCommand.
+            const command = this.context
+                ? new ReplaceSceneCommand('Run code', this.context.scene)
+                : null;
+
             // Avoid scene->code feedback loops while applying code
             this.isApplyingCode = true;
             const result = this.codeRunner.run(code, { clearExisting: true });
             this.isApplyingCode = false;
-            
+
+            if (command && result.success) {
+                command.captureAfter(this.context.scene);
+                if (!command.isNoop()) {
+                    this.context.history.record(command);
+                }
+            }
+
             if (result.success) {
                 this.showOutput(
                     `✓ Success!\n` +
@@ -427,11 +444,7 @@ export class CodeEditor extends Component {
                     'success'
                 );
                 
-                // Refresh canvas
-                if (this.canvasRenderer) {
-                    this.canvasRenderer.requestRender();
-                }
-                
+                // Canvas repaints via the SHAPE_ADDED/REMOVED events the run emitted.
                 // Emit event so other components can update
                 EventBus.emit(EVENTS.CODE_EXECUTED, { code, result });
             } else {
@@ -459,9 +472,7 @@ export class CodeEditor extends Component {
         shapes.forEach(shape => {
             this.shapeStore.remove(shape.id);
         });
-        if (this.canvasRenderer) {
-            this.canvasRenderer.requestRender();
-        }
+        // Canvas repaints via the SHAPE_REMOVED events.
     }
 
     /**
@@ -572,12 +583,10 @@ SHORTCUTS
      * Update stores when the active scene changes
      * @param {import('../core/ShapeStore.js').ShapeStore} shapeStore
      * @param {import('../core/ParameterStore.js').ParameterStore} parameterStore
-     * @param {import('./CanvasRenderer.js').CanvasRenderer} canvasRenderer
      */
-    setStores(shapeStore, parameterStore, canvasRenderer) {
+    setStores(shapeStore, parameterStore) {
         this.shapeStore = shapeStore;
         this.parameterStore = parameterStore;
-        this.canvasRenderer = canvasRenderer;
         if (this.codeRunner) {
             this.codeRunner.shapeStore = shapeStore;
             this.codeRunner.parameterStore = parameterStore;

@@ -5,12 +5,22 @@
 import { Component } from './Component.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { LiteralBinding, ParameterBinding, ExpressionBinding } from '../models/Binding.js';
+import { SetBindingCommand } from '../commands/shapeCommands.js';
 
 export class PropertiesPanel extends Component {
-    constructor(container, shapeStore, parameterStore) {
+    /**
+     * @param {HTMLElement} container
+     * @param {import('../core/ShapeStore.js').ShapeStore} shapeStore
+     * @param {import('../core/ParameterStore.js').ParameterStore} parameterStore
+     * @param {import('../core/SceneContext.js').SceneContext} [context] -
+     *   Provides the active tab's undo history; property edits route through
+     *   SetBindingCommand when present (falls back to a direct store write).
+     */
+    constructor(container, shapeStore, parameterStore, context = null) {
         super(container);
         this.shapeStore = shapeStore;
         this.parameterStore = parameterStore;
+        this.context = context;
         this.selectedShape = null;
         this.selectedShapeIds = new Set(); // Multi-selection
         this.bindingResolver = shapeStore.bindingResolver;
@@ -542,16 +552,9 @@ export class PropertiesPanel extends Component {
             if (!targetShape) return;
             const newValue = parseFloat(input.value);
             if (!isNaN(newValue)) {
-                // Create literal binding with the new value
-                const binding = new LiteralBinding(newValue);
-                
-                // Also update the shape's actual property value for immediate feedback
-                if (targetShape[property] !== undefined) {
-                    targetShape[property] = newValue;
-                }
-                
-                // Set the binding
-                this.setBinding(targetShape.id, property, binding);
+                // Route through the undoable binding command (which also
+                // updates the raw property value).
+                this.setBinding(targetShape.id, property, new LiteralBinding(newValue));
             }
         };
         
@@ -640,13 +643,22 @@ export class PropertiesPanel extends Component {
      * @param {Binding} binding 
      */
     setBinding(shapeId, property, binding) {
-        this.shapeStore.updateBinding(shapeId, property, binding);
-        
-        // If it's a literal binding, also update the shape's property value
-        if (binding.type === 'literal' && this.selectedShape) {
-            this.selectedShape[property] = binding.value;
+        // Keep the raw property in step for literal bindings so the shape
+        // reflects the value immediately (SetShapePropertyCommand does this
+        // too, but the panel also drives parameter/expression bindings).
+        const shape = this.shapeStore.get(shapeId);
+        if (binding.type === 'literal' && shape && shape[property] !== undefined) {
+            shape[property] = binding.value;
         }
-        
+
+        if (this.context && this.context.history) {
+            // Undoable path: dispatch a SetBindingCommand.
+            this.context.history.execute(new SetBindingCommand(shapeId, property, binding.toJSON()));
+        } else {
+            // Fallback (no context wired): mutate the store directly.
+            this.shapeStore.updateBinding(shapeId, property, binding);
+        }
+
         // Re-render to show updated binding
         setTimeout(() => this.render(), 0);
     }

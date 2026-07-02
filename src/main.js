@@ -124,41 +124,20 @@ function setupToolbarButtons(app) {
         });
     }
     
-    // Undo button - reverts the last action using command history
+    // Undo button - reverts the last command on the active tab's history.
     const btnUndo = document.getElementById('btn-undo');
     if (btnUndo) {
-        btnUndo.addEventListener('click', () => {
-            app.undo();
-        });
-        
-        // Update button state based on history
-        updateUndoRedoButtons(app, btnUndo, null);
+        btnUndo.addEventListener('click', () => app.undo());
     }
-    
-    // Redo button - reapplies the last undone action
+
+    // Redo button - reapplies the last undone command.
     const btnRedo = document.getElementById('btn-redo');
     if (btnRedo) {
-        btnRedo.addEventListener('click', () => {
-            app.redo();
-        });
-        
-        // Update button state based on history
-        updateUndoRedoButtons(app, null, btnRedo);
+        btnRedo.addEventListener('click', () => app.redo());
     }
-    
-    // Update undo/redo buttons periodically and on history changes
-    // This keeps the UI in sync with command history state
-    const updateInterval = setInterval(() => {
-        updateUndoRedoButtons(app, btnUndo, btnRedo);
-    }, 100);
-    
-    // Also update when app is available
-    // Expose method for manual UI updates when history changes
-    if (app) {
-        app.updateUndoRedoUI = function() {
-            updateUndoRedoButtons(app, btnUndo, btnRedo);
-        };
-    }
+
+    // Button enable/disable is driven by Application.updateUndoRedoUI(),
+    // which fires on EVENTS.HISTORY_CHANGED and tab switches (no polling).
 
     // Free draw button - toggles path drawing tool mode
     // When active, allows drawing freeform paths with bezier curves
@@ -169,14 +148,14 @@ function setupToolbarButtons(app) {
             if (!drawActive) {
                 drawActive = true;
                 btnFreeDraw.classList.toggle('active', drawActive);
-                if (app.canvasRenderer) {
-                    app.canvasRenderer.setToolMode('path');
+                if (app.canvasInput) {
+                    app.canvasInput.setToolMode('path');
                 }
                 return;
             }
 
-            if (app.canvasRenderer && app.canvasRenderer.isPathDrawing) {
-                app.canvasRenderer.finishPathDrawing();
+            if (app.canvasInput && app.interaction?.isPathDrawing) {
+                app.canvasInput.finishPathDrawing();
                 btnFreeDraw.classList.toggle('active', true);
                 drawActive = true;
                 return;
@@ -184,8 +163,8 @@ function setupToolbarButtons(app) {
 
             drawActive = false;
             btnFreeDraw.classList.toggle('active', drawActive);
-            if (app.canvasRenderer) {
-                app.canvasRenderer.setToolMode('select');
+            if (app.canvasInput) {
+                app.canvasInput.setToolMode('select');
             }
         });
     }
@@ -197,32 +176,6 @@ function setupToolbarButtons(app) {
         btnAssembly.addEventListener('click', () => {
             window.location.href = './assemble.html';
         });
-    }
-}
-
-/**
- * Update Undo/Redo Button States
- * 
- * Enables/disables undo and redo buttons based on command history state.
- * Also updates visual styling (opacity, cursor) to reflect availability.
- * 
- * @param {Application} app - The application instance
- * @param {HTMLElement|null} btnUndo - Undo button element
- * @param {HTMLElement|null} btnRedo - Redo button element
- */
-function updateUndoRedoButtons(app, btnUndo, btnRedo) {
-    if (app.sceneHistory) {
-        if (btnUndo) {
-            btnUndo.disabled = !app.sceneHistory.canUndo();
-            btnUndo.style.opacity = app.sceneHistory.canUndo() ? '1' : '0.5';
-            btnUndo.style.cursor = app.sceneHistory.canUndo() ? 'pointer' : 'not-allowed';
-        }
-        
-        if (btnRedo) {
-            btnRedo.disabled = !app.sceneHistory.canRedo();
-            btnRedo.style.opacity = app.sceneHistory.canRedo() ? '1' : '0.5';
-            btnRedo.style.cursor = app.sceneHistory.canRedo() ? 'pointer' : 'not-allowed';
-        }
     }
 }
 

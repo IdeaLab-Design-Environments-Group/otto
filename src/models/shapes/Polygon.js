@@ -2,10 +2,9 @@
  * @fileoverview Regular polygon with N sides, inscribed in a circle of the given radius.
  *
  * The polygon is parameterised by centre, circumradius, and side count.  The side count
- * is clamped to a minimum of 3 in the constructor (a polygon with fewer than 3 sides is
- * geometrically undefined).  The same clamp is applied again inside toGeometryPath() as a
- * defensive guard in case the value is changed externally or resolved from a binding that
- * produces a value below 3.
+ * is clamped to a minimum of 3 inside toGeometryPath() (a polygon with fewer than 3 sides
+ * is geometrically undefined) as a defensive guard in case the value is changed externally
+ * or resolved from a binding that produces a value below 3.
  *
  * Vertices are distributed evenly around the circumscribed circle.  The first vertex is
  * placed at the top (angle = -PI/2) so that a polygon with an odd number of sides has a
@@ -40,38 +39,14 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Polygon extends Shape {
-    /**
-     * @param {string}         id       - Unique shape identifier (e.g. "Polygon 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]  - X coordinate of the polygon centre.
-     * @param {number}         [centerY=0]  - Y coordinate of the polygon centre.
-     * @param {number}         [radius=20]  - Circumradius (distance from centre to each vertex).
-     * @param {number}         [sides=5]    - Number of sides.  Clamped to a minimum of 3.
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, radius = 20, sides = 5) {
-        super(id, 'polygon', position);
-        /** @type {number} X coordinate of the polygon centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the polygon centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Circumradius -- distance from centre to each vertex. Bindable. */
-        this.radius = radius;
-        /**
-         * @type {number} Number of sides.  Bindable.
-         * Clamped to >= 3 here and again in toGeometryPath() as a defensive guard against
-         * out-of-range values arriving via binding resolution.
-         */
-        this.sides = Math.max(3, Math.floor(sides)); // Minimum 3 sides
-    }
+    static type = 'polygon';
 
-    /**
-     * Declares which Polygon properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'radius', 'sides']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'radius', 'sides'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        radius: { type: 'number', default: 20, bindable: true, min: 0, label: 'Radius' },
+        sides: { type: 'number', default: 5, bindable: true, min: 3, step: 1, label: 'Sides' }
+    };
 
     /**
      * Compute the AABB by delegating to the geometry path.
@@ -146,60 +121,5 @@ export class Polygon extends Shape {
         }
 
         return GeoPath.fromPoints(points, true); // Closed polygon
-    }
-
-    /**
-     * Deep-copy this Polygon, including all active bindings.
-     * @returns {Polygon} A new Polygon value-equal to this one.
-     */
-    clone() {
-        const polygon = new Polygon(
-            this.id,
-            { ...this.position },
-            this.centerX,
-            this.centerY,
-            this.radius,
-            this.sides
-        );
-        // Copy bindings
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                polygon.setBinding(property, this.bindings[property]);
-            }
-        });
-        return polygon;
-    }
-
-    /**
-     * Reconstruct a Polygon from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json            - Serialized shape object.
-     * @param {string} json.id         - Shape identifier.
-     * @param {Object} [json.position] - Legacy position.
-     * @param {number} [json.centerX]  - Serialized centre X.
-     * @param {number} [json.centerY]  - Serialized centre Y.
-     * @param {number} [json.radius]   - Serialized circumradius.
-     * @param {number} [json.sides]    - Serialized side count.
-     * @returns {Polygon} A new Polygon with geometry restored.
-     */
-    static fromJSON(json) {
-        const polygon = new Polygon(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.radius || 50,
-            json.sides || 5
-        );
-
-        // Restore bindings
-        if (json.bindings) {
-            Object.keys(json.bindings).forEach(property => {
-                // Binding will be restored by ShapeRegistry
-            });
-        }
-
-        return polygon;
     }
 }

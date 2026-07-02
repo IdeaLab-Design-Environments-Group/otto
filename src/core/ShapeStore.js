@@ -44,6 +44,7 @@
  */
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { EdgeSelection, edgesFromItem } from '../geometry/edge/index.js';
+import { SelectionModel } from './SelectionModel.js';
 
 export class ShapeStore {
     /**
@@ -70,47 +71,21 @@ export class ShapeStore {
         this.parameterStore = parameterStore;
         this.bindingResolver = bindingResolver;
 
-        /**
-         * The ID of the "primary" selected shape.  Maintained in parallel
-         * with {@link #selectedShapeIds} for backward compatibility with UI
-         * code that was written before multi-selection was added.  Always
-         * equals the most-recently-added ID in the Set, or null.
-         * @type {string|null}
-         */
-        this.selectedShapeId = null; // Single selection (for backward compatibility)
-
-        /**
-         * The full set of currently-selected shape IDs.  This is the
-         * authoritative selection when multiple shapes are selected at once
-         * (e.g. via rubber-band drag or Shift+click).
-         * @type {Set<string>}
-         */
-        this.selectedShapeIds = new Set(); // Multi-selection
         this.eventBus = EventBus;
 
-        // ── Edge selection state ────────────────────────────────────────
         /**
-         * Delegate that tracks which edges are selected.  Wraps the
-         * selection logic (add, remove, toggle, has) so that ShapeStore
-         * does not have to re-implement it.
-         * @type {EdgeSelection}
+         * Single source of truth for shape selection, edge selection,
+         * selection mode, and hover state.  ShapeStore keeps thin delegate
+         * methods and accessor properties for backward compatibility with
+         * pre-MVC call sites; new code should use the SelectionModel via
+         * SceneState/SceneContext directly.
+         * @type {SelectionModel}
          */
-        this.edgeSelection = new EdgeSelection();
-        /**
-         * The current selection mode.  When {@code 'shape'}, clicks select
-         * whole shapes; when {@code 'edge'}, clicks select individual edges
-         * for joinery assignment.  Switching back to {@code 'shape'} clears
-         * the edge selection automatically.
-         * @type {'shape'|'edge'}
-         */
-        this.selectionMode = 'shape'; // 'shape' | 'edge'
-        /**
-         * The edge (plus cursor position) that the pointer is hovering over,
-         * or null.  Used by the renderer to draw an edge-highlight before the
-         * user clicks.
-         * @type {{edge: Edge, position: Vec}|null}
-         */
-        this.hoveredEdge = null;
+        this.selection = new SelectionModel({
+            getShape: (id) => this.shapes.get(id) ?? null,
+            getAllIds: () => Array.from(this.shapes.keys())
+        });
+
         /**
          * Persistent map of joinery metadata keyed by a canonical edge key
          * string (produced by {@link EdgeSelection.keyFor}).  Each value
@@ -120,15 +95,44 @@ export class ShapeStore {
          * @type {Map<string, {type: string, thicknessMm: number, fingerCount: number, align: string}>}
          */
         this.edgeJoinery = new Map(); // Map<edgeKey, { type, thicknessMm }>
+    }
 
-        // ── Shape hover state ───────────────────────────────────────────
-        /**
-         * The ID of the shape the pointer is currently hovering over, or
-         * null.  Emits {@link EVENTS.SHAPE_HOVERED} on change so that the
-         * renderer can draw a hover highlight.
-         * @type {string|null}
-         */
-        this.hoveredShapeId = null;
+    // ── Backward-compatible selection accessors ─────────────────────────
+    // Pre-MVC call sites (Serializer, fromJSON, older UI code) read these
+    // as plain fields; they now proxy the SelectionModel.
+
+    /** @returns {string|null} Primary selected shape id. */
+    get selectedShapeId() {
+        return this.selection.primaryId;
+    }
+
+    set selectedShapeId(id) {
+        this.selection.primaryId = id;
+    }
+
+    /** @returns {Set<string>} The LIVE selected-ids set (not a copy). */
+    get selectedShapeIds() {
+        return this.selection.selectedShapeIds;
+    }
+
+    /** @returns {EdgeSelection} The edge-selection delegate. */
+    get edgeSelection() {
+        return this.selection.edgeSelection;
+    }
+
+    /** @returns {'shape'|'edge'} */
+    get selectionMode() {
+        return this.selection.selectionMode;
+    }
+
+    /** @returns {{edge: Object, position: Object}|null} */
+    get hoveredEdge() {
+        return this.selection.hoveredEdge;
+    }
+
+    /** @returns {string|null} */
+    get hoveredShapeId() {
+        return this.selection.hoveredShapeId;
     }
     
     /**
@@ -169,10 +173,7 @@ export class ShapeStore {
         const shape = this.shapes.get(id);
         if (shape) {
             this.shapes.delete(id);
-            if (this.selectedShapeId === id) {
-                this.selectedShapeId = null;
-            }
-            this.selectedShapeIds.delete(id);
+            this.selection.pruneShape(id);
             // Purge any joinery metadata that was attached to edges of this
             // shape.  Edge keys are prefixed with the owning shape's ID.
             const prefix = `${id}:`;
@@ -183,6 +184,26 @@ export class ShapeStore {
             }
             this.eventBus.emit(EVENTS.SHAPE_REMOVED, { id });
         }
+    }
+
+    /**
+     * Replace a shape instance wholesale, keeping its position in the
+     * insertion order (and therefore its paint order). Used by the command
+     * system to restore captured shape state on undo/redo.
+     *
+     * Emits SHAPE_UPDATED and PARAM_CHANGED so every observer refreshes.
+     *
+     * @param {Shape} shape - Replacement instance; shape.id must already
+     *   exist in the store.
+     * @throws {Error} If no shape with that id exists.
+     */
+    replace(shape) {
+        if (!this.shapes.has(shape.id)) {
+            throw new Error(`Shape with id ${shape.id} not found`);
+        }
+        this.shapes.set(shape.id, shape);
+        this.eventBus.emit(EVENTS.SHAPE_UPDATED, { id: shape.id, shape });
+        this.eventBus.emit(EVENTS.PARAM_CHANGED, { shapeId: shape.id });
     }
 
     /**
@@ -315,7 +336,7 @@ export class ShapeStore {
      * @returns {Shape|null} The primary selected shape, or null.
      */
     getSelected() {
-        return this.selectedShapeId ? this.shapes.get(this.selectedShapeId) : null;
+        return this.selection.getSelected();
     }
 
     /**
@@ -330,19 +351,7 @@ export class ShapeStore {
      * @param {string|null} id  The shape to select, or null to deselect all.
      */
     setSelected(id) {
-        const oldSelectedId = this.selectedShapeId;
-        this.selectedShapeId = id;
-        this.selectedShapeIds.clear();
-        if (id) {
-            this.selectedShapeIds.add(id);
-        }
-
-        if (oldSelectedId !== id) {
-            this.eventBus.emit(EVENTS.SHAPE_SELECTED, {
-                id,
-                shape: id ? this.shapes.get(id) : null
-            });
-        }
+        this.selection.setSelected(id);
     }
 
     /**
@@ -354,7 +363,7 @@ export class ShapeStore {
      * @returns {Set<string>} A new Set containing every selected shape ID.
      */
     getSelectedIds() {
-        return new Set(this.selectedShapeIds);
+        return this.selection.getSelectedIds();
     }
 
     /**
@@ -367,15 +376,7 @@ export class ShapeStore {
      * @param {string} id  The ID of the shape to add to the selection.
      */
     addToSelection(id) {
-        if (this.shapes.has(id)) {
-            this.selectedShapeIds.add(id);
-            this.selectedShapeId = id; // Set as primary selection
-            this.eventBus.emit(EVENTS.SHAPE_SELECTED, {
-                id,
-                shape: this.shapes.get(id),
-                selectedIds: Array.from(this.selectedShapeIds)
-            });
-        }
+        this.selection.addToSelection(id);
     }
 
     /**
@@ -389,20 +390,7 @@ export class ShapeStore {
      * @param {string} id  The ID of the shape to deselect.
      */
     removeFromSelection(id) {
-        this.selectedShapeIds.delete(id);
-        if (this.selectedShapeId === id) {
-            // Set another selected shape as primary, or null
-            this.selectedShapeId = this.selectedShapeIds.size > 0
-                ? Array.from(this.selectedShapeIds)[0]
-                : null;
-        }
-
-        // Emit selection event when removing from selection
-        this.eventBus.emit(EVENTS.SHAPE_SELECTED, {
-            id: this.selectedShapeId,
-            shape: this.selectedShapeId ? this.shapes.get(this.selectedShapeId) : null,
-            selectedIds: Array.from(this.selectedShapeIds)
-        });
+        this.selection.removeFromSelection(id);
     }
 
     /**
@@ -417,19 +405,7 @@ export class ShapeStore {
      *     clear the selection.
      */
     setSelectedIds(ids) {
-        this.selectedShapeIds.clear();
-        ids.forEach(id => {
-            if (this.shapes.has(id)) {
-                this.selectedShapeIds.add(id);
-            }
-        });
-        this.selectedShapeId = ids.length > 0 ? ids[0] : null;
-
-        this.eventBus.emit(EVENTS.SHAPE_SELECTED, {
-            id: this.selectedShapeId,
-            shape: this.selectedShapeId ? this.shapes.get(this.selectedShapeId) : null,
-            selectedIds: Array.from(this.selectedShapeIds)
-        });
+        this.selection.setSelectedIds(ids);
     }
 
     /**
@@ -438,13 +414,7 @@ export class ShapeStore {
      * the PropertiesPanel knows to hide itself.
      */
     clearSelection() {
-        this.selectedShapeId = null;
-        this.selectedShapeIds.clear();
-        this.eventBus.emit(EVENTS.SHAPE_SELECTED, {
-            id: null,
-            shape: null,
-            selectedIds: []
-        });
+        this.selection.clearSelection();
     }
 
     /**
@@ -453,8 +423,7 @@ export class ShapeStore {
      * the event emission are handled in one place.
      */
     selectAll() {
-        const allIds = Array.from(this.shapes.keys());
-        this.setSelectedIds(allIds);
+        this.selection.selectAll();
     }
 
     // =========================================================================
@@ -489,15 +458,7 @@ export class ShapeStore {
      * @param {'shape'|'edge'} mode  The new selection mode.
      */
     setSelectionMode(mode) {
-        if (this.selectionMode !== mode) {
-            this.selectionMode = mode;
-            // Clear edge selection when switching to shape mode
-            if (mode === 'shape') {
-                this.edgeSelection.clear();
-                this.hoveredEdge = null;
-            }
-            this.eventBus.emit(EVENTS.SELECTION_MODE_CHANGED, { mode });
-        }
+        this.selection.setSelectionMode(mode);
     }
 
     /**
@@ -506,7 +467,7 @@ export class ShapeStore {
      * @returns {'shape'|'edge'} The active selection mode.
      */
     getSelectionMode() {
-        return this.selectionMode;
+        return this.selection.getSelectionMode();
     }
 
     /**
@@ -596,11 +557,7 @@ export class ShapeStore {
      *     make the sole selection.
      */
     selectEdge(edge) {
-        this.edgeSelection.set(edge);
-        this.eventBus.emit(EVENTS.EDGE_SELECTED, {
-            edge,
-            edges: this.edgeSelection.all()
-        });
+        this.selection.selectEdge(edge);
     }
 
     /**
@@ -611,11 +568,7 @@ export class ShapeStore {
      *     add.
      */
     addEdgeToSelection(edge) {
-        this.edgeSelection.add(edge);
-        this.eventBus.emit(EVENTS.EDGE_SELECTED, {
-            edge,
-            edges: this.edgeSelection.all()
-        });
+        this.selection.addEdgeToSelection(edge);
     }
 
     /**
@@ -629,11 +582,7 @@ export class ShapeStore {
      *     deselect.
      */
     removeEdgeFromSelection(edge) {
-        this.edgeSelection.remove(edge);
-        this.eventBus.emit(EVENTS.EDGE_SELECTED, {
-            edge: null,
-            edges: this.edgeSelection.all()
-        });
+        this.selection.removeEdgeFromSelection(edge);
     }
 
     /**
@@ -646,11 +595,7 @@ export class ShapeStore {
      *     toggle.
      */
     toggleEdgeSelection(edge) {
-        const isNowSelected = this.edgeSelection.toggle(edge);
-        this.eventBus.emit(EVENTS.EDGE_SELECTED, {
-            edge: isNowSelected ? edge : null,
-            edges: this.edgeSelection.all()
-        });
+        this.selection.toggleEdgeSelection(edge);
     }
 
     /**
@@ -659,12 +604,7 @@ export class ShapeStore {
      * to shape-selection mode.
      */
     clearEdgeSelection() {
-        this.edgeSelection.clear();
-        this.hoveredEdge = null;
-        this.eventBus.emit(EVENTS.EDGE_SELECTED, {
-            edge: null,
-            edges: []
-        });
+        this.selection.clearEdgeSelection();
     }
 
     /**
@@ -677,7 +617,7 @@ export class ShapeStore {
      *     selected edges, or an empty array.
      */
     getSelectedEdges() {
-        return this.edgeSelection.all();
+        return this.selection.getSelectedEdges();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -725,6 +665,23 @@ export class ShapeStore {
     }
 
     /**
+     * Remove the joinery metadata for an edge (undo of setEdgeJoinery).
+     * Emits EDGE_JOINERY_CHANGED with joinery: null.
+     *
+     * @param {import('../geometry/edge/index.js').Edge} edge
+     */
+    removeEdgeJoinery(edge) {
+        if (!edge) return;
+        const key = EdgeSelection.keyFor(edge);
+        if (this.edgeJoinery.delete(key)) {
+            this.eventBus.emit(EVENTS.EDGE_JOINERY_CHANGED, {
+                edge,
+                joinery: null
+            });
+        }
+    }
+
+    /**
      * Retrieve the joinery metadata previously stored for an edge.
      *
      * Key-format fallback
@@ -762,7 +719,7 @@ export class ShapeStore {
      * @returns {boolean} True if the edge is selected; false otherwise.
      */
     isEdgeSelected(edge) {
-        return this.edgeSelection.has(edge);
+        return this.selection.isEdgeSelected(edge);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -791,11 +748,7 @@ export class ShapeStore {
      *     world-space position of the pointer at the time of the hover.
      */
     setHoveredEdge(edge, position = null) {
-        this.hoveredEdge = edge ? { edge, position } : null;
-        this.eventBus.emit(EVENTS.EDGE_HOVERED, {
-            edge,
-            position
-        });
+        this.selection.setHoveredEdge(edge, position);
     }
 
     /**
@@ -806,7 +759,7 @@ export class ShapeStore {
      *     the time it was set, or null if no edge is hovered.
      */
     getHoveredEdge() {
-        return this.hoveredEdge;
+        return this.selection.getHoveredEdge();
     }
 
     /**
@@ -820,12 +773,7 @@ export class ShapeStore {
      *     or null if the pointer is over empty canvas.
      */
     setHoveredShape(shapeId) {
-        if (this.hoveredShapeId !== shapeId) {
-            this.hoveredShapeId = shapeId;
-            this.eventBus.emit(EVENTS.SHAPE_HOVERED, {
-                shapeId
-            });
-        }
+        this.selection.setHoveredShape(shapeId);
     }
 
     /**
@@ -834,7 +782,7 @@ export class ShapeStore {
      * @returns {string|null} The hovered shape ID, or null.
      */
     getHoveredShapeId() {
-        return this.hoveredShapeId;
+        return this.selection.getHoveredShapeId();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -14,19 +14,16 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * Bindable properties: x, y, width, height, chamfer
  */
 export class ChamferRectangle extends Shape {
-    constructor(id, position = { x: 0, y: 0 }, x = 0, y = 0, width = 50, height = 50, chamfer = 5) {
-        super(id, 'chamferRectangle', position);
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.chamfer = Math.min(chamfer, width / 2, height / 2);
-    }
-    
-    getBindableProperties() {
-        return ['x', 'y', 'width', 'height', 'chamfer'];
-    }
-    
+    static type = 'chamferRectangle';
+
+    static SCHEMA = {
+        x: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'X' },
+        y: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Y' },
+        width: { type: 'number', default: 50, bindable: true, min: 0, label: 'Width' },
+        height: { type: 'number', default: 50, bindable: true, min: 0, label: 'Height' },
+        chamfer: { type: 'number', default: 5, bindable: true, min: 0, label: 'Chamfer' }
+    };
+
     getBounds() {
         const path = this.toGeometryPath();
         const box = path.tightBoundingBox() || path.looseBoundingBox();
@@ -61,7 +58,9 @@ export class ChamferRectangle extends Shape {
     getPoints() {
         const w = this.width / 2;
         const h = this.height / 2;
-        const c = this.chamfer;
+        // Clamp so opposing chamfers can never cross (was enforced in the
+        // old constructor; geometry is the right owner of this constraint).
+        const c = Math.min(this.chamfer, w, h);
         const cx = this.x + w;
         const cy = this.y + h;
 
@@ -75,27 +74,5 @@ export class ChamferRectangle extends Shape {
             { x: cx - w, y: cy + h - c },
             { x: cx - w, y: cy - h + c }
         ];
-    }
-    
-    clone() {
-        const cr = new ChamferRectangle(this.id, { ...this.position }, this.x, this.y, this.width, this.height, this.chamfer);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                cr.setBinding(property, this.bindings[property]);
-            }
-        });
-        return cr;
-    }
-    
-    static fromJSON(json) {
-        return new ChamferRectangle(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.x || 0,
-            json.y || 0,
-            json.width || 100,
-            json.height || 100,
-            json.chamfer || 10
-        );
     }
 }

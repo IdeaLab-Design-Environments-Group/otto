@@ -15,29 +15,18 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * Bindable properties: centerX, centerY, pitchDiameter, teeth, pressureAngle, boreDiameter
  */
 export class Gear extends Shape {
-    constructor(
-        id,
-        position = { x: 0, y: 0 },
-        centerX = 0,
-        centerY = 0,
-        pitchDiameter = 25,
-        teeth = 10,
-        pressureAngle = 20,
-        boreDiameter = null
-    ) {
-        super(id, 'gear', position);
-        this.centerX = centerX;
-        this.centerY = centerY;
-        this.pitchDiameter = pitchDiameter;
-        this.teeth = teeth;
-        this.pressureAngle = pressureAngle;
-        this.boreDiameter = boreDiameter; // optional inner hole
-    }
-    
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'pitchDiameter', 'teeth', 'pressureAngle', 'boreDiameter'];
-    }
-    
+    static type = 'gear';
+
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        pitchDiameter: { type: 'number', default: 25, bindable: true, min: 1, label: 'Pitch Diameter', aliases: ['pitch_diameter'] },
+        teeth: { type: 'number', default: 10, bindable: true, min: 3, step: 1, label: 'Teeth' },
+        pressureAngle: { type: 'number', default: 20, bindable: true, label: 'Pressure Angle', unit: 'deg', aliases: ['pressure_angle'] },
+        // boreDiameter is an optional inner hole; null means "use the default bore".
+        boreDiameter: { type: 'number', default: null, bindable: true, min: 0, label: 'Bore Diameter', aliases: ['bore_diameter'] }
+    };
+
     getBounds() {
         const path = this.toGeometryPath();
         const box = path.tightBoundingBox() || path.looseBoundingBox();
@@ -131,37 +120,5 @@ export class Gear extends Shape {
         }
 
         return points;
-    }
-    
-    clone() {
-        const g = new Gear(
-            this.id,
-            { ...this.position },
-            this.centerX,
-            this.centerY,
-            this.pitchDiameter,
-            this.teeth,
-            this.pressureAngle,
-            this.boreDiameter
-        );
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                g.setBinding(property, this.bindings[property]);
-            }
-        });
-        return g;
-    }
-    
-    static fromJSON(json) {
-        return new Gear(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.pitchDiameter || 50,
-            json.teeth || 10,
-            json.pressureAngle || 20,
-            json.boreDiameter ?? null
-        );
     }
 }
