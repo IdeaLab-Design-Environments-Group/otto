@@ -1,1642 +1,562 @@
-# Otto v2 - Complete Architecture Documentation
+# Otto Architecture
 
-This document provides comprehensive architecture documentation for the Otto v2 system, including high-level system design, geometry library, and assembly plan architecture.
+Otto is a browser-based **2.5D parametric design environment**. You draw flat
+shapes on a canvas, drive their dimensions with parameters and bindings, give
+each piece a `depth` (extrusion) and `z` (elevation), assign woodworking-style
+edge joinery, and see the result rebuilt live in an embedded 3D viewport — or
+generate the same scene from AQUI code or Blockly blocks.
 
-**Notes**: UI measurements and rulers are in **mm**, and 100% zoom maps to a 300mm x 300mm canvas scale.
+This document describes the system **after** the MVC / schema / command-system
+refactor. If you are looking for the old `CanvasRenderer`, the memento undo
+system, or the standalone `assemble.html` assembly page — they are gone. See
+the individual sections for what replaced them.
 
-## Table of Contents
+## Table of contents
 
-### Part 1: System Architecture
-1. [High-Level System Architecture](#1-high-level-system-architecture)
-2. [Core Components & Dependencies](#2-core-components--dependencies)
-3. [Data Flow Architecture](#3-data-flow-architecture)
-4. [Design Patterns Overview](#4-design-patterns-overview)
-5. [Event Bus Architecture](#5-event-bus-architecture)
-6. [Persistence Layer](#6-persistence-layer)
-7. [UI Components Architecture](#7-ui-components-architecture)
-8. [Shape & Binding System](#8-shape--binding-system)
-9. [Plugin System Architecture](#9-plugin-system-architecture)
-10. [Command & History System](#10-command--history-system)
-11. [Blocks Editor Bidirectional Flow](#11-blocks-editor-bidirectional-flow)
-12. [Edge Selection System](#12-edge-selection-system)
-13. [Text-Based Programming System](#13-text-based-programming-system)
-14. [Editor Sync Connector](#14-editor-sync-connector)
-15. [Resize Handles & Shape Resizing](#15-resize-handles--shape-resizing)
-
-### Part 2: Geometry Library Architecture
-16. [Geometry Library Overview](#16-geometry-library-overview)
-17. [Module Dependency Graph](#17-module-dependency-graph)
-18. [API Conventions](#18-api-conventions)
-19. [Geometry Library Implementation](#19-geometry-library-implementation)
-
-### Part 3: Assembly Plan Architecture
-20. [Assembly Plan Overview](#20-assembly-plan-overview)
-21. [Assembly Data Flow](#21-assembly-data-flow)
-22. [Assembly Components](#22-assembly-components)
+1. [MVC layering](#1-mvc-layering)
+2. [Declarative shape schema](#2-declarative-shape-schema)
+3. [Command system and undo](#3-command-system-and-undo)
+4. [2.5D: depth and z](#4-25d-depth-and-z)
+5. [Live 3D viewport](#5-live-3d-viewport)
+6. [Plugins](#6-plugins)
+7. [Accessibility](#7-accessibility)
+8. [EventBus](#8-eventbus)
+9. [Geometry library](#9-geometry-library)
+10. [Testing](#10-testing)
+11. [Deferred / documented debts](#11-deferred--documented-debts)
 
 ---
 
-## Part 1: System Architecture
+## Overview
 
-## 1. High-Level System Architecture
+The single most important structural change: the old **3526-line
+`CanvasRenderer` god object** — which owned pixels, input, selection, hit
+testing, coordinate math, and interaction state all at once — has been
+**deleted** and dissolved into a clean Model / View / Controller split. Nothing
+holds a long-lived mutable copy of state that another layer also owns; the
+`EventBus` is the only cross-layer notification channel.
+
+The layers and their allowed dependencies:
 
 ```mermaid
----
-config:
-  layout: elk
----
-flowchart TB
- subgraph CoreLayer["Core Layer"]
-        TM["TabManager"]
-        SS["SceneState"]
-        SH["ShapeStore"]
-        PS["ParameterStore"]
-        BR["BindingResolver"]
-        CMD["CommandRegistry"]
-  end
- subgraph UILayer["UI Layer"]
-        TB["TabBar"]
-        SL["ShapeLibrary"]
-        CR["CanvasRenderer"]
-        PM_UI["ParametersMenu"]
-        PP["PropertiesPanel"]
-        ZC["ZoomControls"]
-  end
- subgraph ModelLayer["Model Layer"]
-        SR["ShapeRegistry"]
-        Shapes["Shapes: Circle, Rectangle, Polygon, Star, Line, Path"]
-        Bindings["Bindings System"]
-        Decorators["Shape Decorators"]
-  end
- subgraph PersistenceLayer["Persistence Layer"]
-        SM["StorageManager"]
-        FM["FileManager"]
-        SER["Serializer"]
-        Backends["Storage Backends"]
-  end
- subgraph EventSystem["Event System"]
-        EB["EventBus Singleton"]
-  end
- subgraph PluginSystem["Plugin System"]
-        PM_Plugin["PluginManager"]
-        Plugins["Plugins"]
-  end
- subgraph OttoV2["Otto v2 Application"]
-        App["Application Facade"]
-        CoreLayer
-        UILayer
-        ModelLayer
-        PersistenceLayer
-        EventSystem
-        PluginSystem
-  end
-    App --> TM & UILayer & SM & FM & PM_Plugin
-    TM --> SS
-    SS --> SH & PS & BR
-    UILayer --> CoreLayer & ModelLayer & EB
-    CoreLayer --> ModelLayer & EB
-    SM --> SER & Backends
-    FM --> SER
-    PM_Plugin --> Plugins
-    Plugins --> SR
-    ModelLayer --> EB
-    User["User Interaction"] --> UILayer
-    Storage["LocalStorage / IndexedDB"] --> Backends
-    Files["JSON Files"] --> FM
-```
-
----
-
-## 2. Core Components & Dependencies
-
-```mermaid
----
-config:
-  layout: elk
----
-classDiagram
-    class Application {
-        -TabManager tabManager
-        -StorageManager storageManager
-        -FileManager fileManager
-        -SceneHistory sceneHistory
-        -SceneState currentSceneState
-        -CanvasRenderer canvasRenderer
-        -ShapeLibrary shapeLibrary
-        -ParametersMenu parametersMenu
-        -PropertiesPanel propertiesPanel
-        -TabBar tabBar
-        -ZoomControls zoomControls
-        -DragDropManager dragDropManager
-        +init()
-        +save()
-        +load()
-        +undo()
-        +redo()
-        +newTab()
-        +exportFile()
-        +importFile()
-    }
-
-    class TabManager {
-        -Tab[] tabs
-        -string activeTabId
-        -EventBus eventBus
-        +createTab(name)
-        +closeTab(id)
-        +switchTab(id)
-        +getActiveTab()
-        +getActiveScene()
-        +getAllTabs()
-    }
-
-    class Tab {
-        +string id
-        +string name
-        +SceneState sceneState
-    }
-
-    class SceneState {
-        -ShapeStore shapeStore
-        -ParameterStore parameterStore
-        -BindingResolver bindingResolver
-        -Viewport viewport
-        +createMemento()
-        +restoreMemento()
-        +toJSON()
-        +fromJSON()
-    }
-
-    class ShapeStore {
-        -Map shapes
-        -ParameterStore parameterStore
-        -BindingResolver bindingResolver
-        -Set selectedShapeIds
-        -EventBus eventBus
-        +add(shape)
-        +remove(id)
-        +get(id)
-        +getAll()
-        +getResolved()
-        +setSelected(id)
-        +selectAll()
-    }
-
-    class ParameterStore {
-        -Map parameters
-        -EventBus eventBus
-        +add(name, value)
-        +remove(name)
-        +get(name)
-        +set(name, value)
-        +getAll()
-        +has(name)
-    }
-
-    class BindingResolver {
-        -ParameterStore parameterStore
-        +resolve(shape)
-        +resolveAll(shapes)
-        +resolveBinding(binding)
-    }
-
-    class CommandRegistry {
-        -Map registry
-        -Command[] history
-        -int historyIndex
-        +register(name, CommandClass)
-        +execute(name, args)
-        +undo()
-        +redo()
-    }
-
-    Application "1" --> "1" TabManager
-    Application "1" --> "1" StorageManager
-    Application "1" --> "1" FileManager
-    TabManager "1" --> "*" Tab
-    Tab "1" --> "1" SceneState
-    SceneState "1" --> "1" ShapeStore
-    SceneState "1" --> "1" ParameterStore
-    SceneState "1" --> "1" BindingResolver
-    ShapeStore --> ParameterStore
-    ShapeStore --> BindingResolver
-    BindingResolver --> ParameterStore
-```
-
----
-
-## 3. Data Flow Architecture
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart TB
-    User[User Action] --> UI[UI Component]
-
-    UI --> |Create Shape| DDM[DragDropManager]
-    UI --> |Select Shape| CR[CanvasRenderer]
-    UI --> |Edit Parameter| PM[ParametersMenu]
-    UI --> |Modify Property| PP[PropertiesPanel]
-
-    DDM --> SR[ShapeRegistry]
-    SR --> |Create Instance| Shape[Shape Object]
-    Shape --> SH[ShapeStore]
-
-    SH --> |Emit Event| EB[EventBus]
-    PM --> PS[ParameterStore]
-    PS --> |Emit Event| EB
-
-    PP --> |Update Binding| Shape
-    Shape --> |Set Binding| Binding[Binding Object]
-
-    EB --> |Notify| UI
-    EB --> |Notify| CR
-    EB --> |Create Snapshot| History[SceneHistory]
-
-    subgraph "Rendering Pipeline"
-        CR --> BR[BindingResolver]
-        BR --> PS
-        BR --> |Resolve Values| ResolvedShapes[Resolved Shapes]
-        ResolvedShapes --> Canvas[HTML Canvas]
+flowchart TD
+    subgraph Controllers
+        CIC[CanvasInputController<br/>all mouse/wheel]
+        KSC[KeyboardShortcutController<br/>all canvas keys]
+        VPC[ViewportController<br/>pan/zoom + screen↔world]
+        IS[InteractionState<br/>ephemeral view-model]
     end
 
-    subgraph "Persistence Flow"
-        SH --> Serializer
-        PS --> Serializer
-        Serializer --> |JSON| StorageBackend[Storage Backend]
-        StorageBackend --> |Save| DB[(Storage)]
-        DB --> |Load| StorageBackend
-        StorageBackend --> |JSON| Serializer
-        Serializer --> |Restore| SH
-        Serializer --> |Restore| PS
+    subgraph Views
+        CV[CanvasView<br/>owns canvas, DPR, rAF]
+        PASSES[Render passes<br/>Grid/Shapes/Joinery/Selection/…]
+        V3D[Viewport3D<br/>embedded live 3D]
+        PANELS[Panels<br/>Properties / Parameters / ShapeLibrary / Tabs]
     end
 
-    History --> |Memento| SceneState[SceneState]
-    SceneState --> |Undo/Redo| SH
-    SceneState --> |Undo/Redo| PS
-```
-
-### Event Types
-
-```mermaid
-classDiagram
-    class EVENTS {
-        <<enumeration>>
-        PARAM_CHANGED
-        PARAM_ADDED
-        PARAM_REMOVED
-        SHAPE_ADDED
-        SHAPE_REMOVED
-        SHAPE_MOVED
-        SHAPE_SELECTED
-        TAB_SWITCHED
-        TAB_CREATED
-        TAB_CLOSED
-        SCENE_LOADED
-        SCENE_SAVED
-        VIEWPORT_CHANGED
-        NODE_LINK_CREATED
-        NODE_LINK_REMOVED
-        NODE_MODULE_EDITED
-        NODE_PARAM_CREATED
-        NODE_EXPRESSION_CHANGED
-    }
-```
-
----
-
-## 6. Persistence Layer
-
-```mermaid
----
-config:
-  layout: elk
----
-graph TB
-    subgraph "Application Layer"
-        App[Application]
-        TM[TabManager]
+    subgraph Model
+        SM[SelectionModel<br/>selection/edge/mode/hover<br/>single source of truth]
+        SS[ShapeStore]
+        PS[ParameterStore]
+        BR[BindingResolver]
+        SHAPES[Schema-driven Shape models]
     end
 
-    subgraph "Persistence Managers"
-        SM[StorageManager]
-        FM[FileManager]
-        SER[Serializer]
+    subgraph Commands
+        HM[HistoryManager<br/>per-tab undo/redo]
+        CMDS[Command classes]
+        CAT[CommandCatalog]
     end
 
-    subgraph "Storage Backends"
-        SF[StorageFactory]
-        LSB[LocalStorageBackend]
-        IDB[IndexedDBBackend]
-        CSB[CloudStorageBackend]
-    end
+    SCTX[SceneContext<br/>lazy active-scene accessor]
+    EB[[EventBus<br/>true singleton pub/sub]]
+    PERS[Persistence<br/>Serializer + Migrations + Storage]
+    PLUG[Plugins<br/>PluginManager + PluginAPI]
 
-    subgraph "Storage"
-        LS[(LocalStorage)]
-        IDB_DB[(IndexedDB)]
-        Cloud[(Cloud Storage)]
-        File[JSON Files]
-    end
+    CIC --> SCTX & IS & VPC & HM
+    KSC --> SCTX & IS & HM
+    VPC --> SCTX
+    CV --> PASSES
+    CV --> SCTX & IS & VPC
+    PASSES -. read only .-> IS
+    V3D --> SCTX
+    PANELS --> SCTX
+    SCTX --> SS & PS & BR & SM & HM
+    HM --> CMDS
+    CMDS --> SS & PS
+    CAT --> CMDS
+    SS --> SM
+    SS --> SHAPES
+    PERS --> SS & PS
+    PLUG --> CAT & SHAPES & EB
 
-    App --> SM
-    App --> FM
-    SM --> TM
-    FM --> TM
-
-    SM --> SER
-    FM --> SER
-
-    SM --> SF
-    SF --> LSB
-    SF --> IDB
-    SF --> CSB
-
-    LSB --> LS
-    IDB --> IDB_DB
-    CSB --> Cloud
-    FM --> File
-
-    SER -->|Serialize| JSON[JSON Data]
-    JSON -->|Deserialize| SER
-
-    subgraph "Serialization Format"
-        JSON --> TabData[Tab Data]
-        TabData --> SceneData[Scene Data]
-        SceneData --> ShapeData[Shape Data]
-        SceneData --> ParamData[Parameter Data]
-        SceneData --> ViewportData[Viewport Data]
-    end
+    SM -. emits .-> EB
+    SS -. emits .-> EB
+    HM -. emits .-> EB
+    VPC -. emits .-> EB
+    EB -. notifies .-> CV & V3D & PANELS
 ```
 
-### Serialization Flow
-
-```mermaid
-sequenceDiagram
-    participant App
-    participant SM as StorageManager
-    participant SER as Serializer
-    participant Backend as StorageBackend
-    participant Storage as Storage
-
-    App->>SM: save()
-    SM->>SER: serialize(tabManager)
-    SER->>SER: toJSON(tabs, scenes, shapes, params)
-    SER-->>SM: JSON data
-    SM->>Backend: save(key, data)
-    Backend->>Storage: write
-    Storage-->>Backend: success
-    Backend-->>SM: success
-    SM-->>App: true
-
-    App->>SM: load()
-    SM->>Backend: load(key)
-    Backend->>Storage: read
-    Storage-->>Backend: JSON data
-    Backend-->>SM: JSON data
-    SM->>SER: deserialize(data)
-    SER->>SER: fromJSON(data)
-    SER-->>SM: TabManager instance
-    SM-->>App: TabManager
-```
+Everything is wired together in `core/Application.js#init()`.
 
 ---
 
-## 7. UI Components Architecture
+## 1. MVC layering
 
-```mermaid
+### Model
 
----
-config:
-  layout: elk
----
+The model is the source of truth for scene content.
 
-graph TB
-    subgraph "Base Component"
-        Component[Component Base Class]
-        Component -->|Abstract Methods| mount
-        Component -->|Abstract Methods| unmount
-        Component -->|Abstract Methods| render
-    end
+- **Stores** (per scene / per tab): `ShapeStore` (the shape repository +
+  joinery map), `ParameterStore` (user parameters), and `BindingResolver`
+  (turns a `Binding` into a concrete number). These hang off a `SceneState`.
+- **`SelectionModel`** (`core/SelectionModel.js`) is the **single source of
+  truth** for everything "selected": shape selection (single + multi via a
+  `Set<string>` plus a `primaryId`), edge selection, the `'shape' | 'edge'`
+  selection mode, and hover state (hovered shape id, hovered edge). Before this
+  class, selection lived in three places at once (ShapeStore's dual fields,
+  CanvasRenderer's private copies, PropertiesPanel's cache) that were manually
+  re-synced. It does not own shapes — it takes `getShape` / `getAllIds`
+  callbacks so it can validate selections and build event payloads without
+  holding the shape map. Selection is deliberately **not undoable**.
+- **Schema-driven Shape models** (`models/shapes/`): see section 2.
 
-    subgraph "UI Components"
-        TB[TabBar]
-        SL[ShapeLibrary]
-        CR[CanvasRenderer]
-        EJM[EdgeJoineryMenu]
-        PM[ParametersMenu]
-        PP[PropertiesPanel]
-        ZC[ZoomControls]
-        BE[BlocksEditor]
-    end
+`ShapeStore` keeps thin **backward-compatible delegates** (`selectedShapeId`,
+`selectedShapeIds`, `selectionMode`, `hoveredEdge`, `setSelected`, …) that
+simply proxy the `SelectionModel`, so pre-refactor call sites (Serializer,
+older panels) keep working. New code reaches the model via `SceneContext`.
 
-    subgraph "Core State"
-        TM[TabManager]
-        SS[SceneState]
-        SR[ShapeRegistry]
-    end
+### Views
 
-    Component -.->|Extends| TB
-    Component -.->|Extends| SL
-    Component -.->|Extends| PM
-    Component -.->|Extends| PP
-    Component -.->|Extends| ZC
-    Component -.->|Extends| BE
-    Component -.->|Extends| EJM
+- **`CanvasView`** (`views/canvas/CanvasView.js`) is the "V" that remained
+  after `CanvasRenderer` was dissolved. It owns *only* the `<canvas>` element,
+  its 2D context, HiDPI (devicePixelRatio) sizing, and the
+  `requestAnimationFrame` render throttle. Every repaint assembles a fresh
+  **`frame`** object and runs the render passes over it:
 
-    TB --> TM
-    TB -->|Subscribe| EB[EventBus]
+  ```js
+  frame = {
+    ctx,             // 2D context, DPR transform pre-applied
+    scene,           // active SceneState (shapeStore, parameterStore, …)
+    selection,       // SelectionModel (ids, edges, mode, hover)
+    viewport,        // live {x, y, zoom} of the active tab
+    vc,              // ViewportController (screen↔world, css size, baseZoom)
+    interaction,     // InteractionState (drag/resize/path-draw/preview)
+    bindingResolver
+  }
+  ```
 
-    SL --> SR
-    SL -->|Drag & Drop| DDM[DragDropManager]
+  **Passes** are pure draws over the frame and must not mutate stores or
+  selection. Render order (unchanged from the monolith):
 
-    CR --> SS
-    CR --> BR[BindingResolver]
-    CR -->|Subscribe| EB
-    CR --> EJM
+  `clear → GridPass` (screen space) `→ [apply viewport transform] → ShapesPass
+  → JoineryPass → SelectionPass → SelectionRectPass → DragPreviewPass →
+  PathDrawPass → HandleEditPass → [restore]`
 
-    BE -->|Create shapes| SR
-    BE -->|Subscribe| EB
+  The one sanctioned exception: `JoineryPass` rebuilds
+  `interaction.joineryHandles` (a hit-test cache) as it draws — that cache is
+  derived render output, not model state.
 
-    PM --> PS[ParameterStore]
-    PM -->|Subscribe| EB
+- **`Viewport3D`** — embedded live 3D (section 5).
+- **Panel components** — `PropertiesPanel`, `ParametersMenu`, `ShapeLibrary`,
+  `TabBar`, `ZoomControls`, `CodeEditor`, `BlocksEditor`, etc.
 
-    PP --> SH[ShapeStore]
-    PP --> PS
-    PP -->|Subscribe| EB
+### Controllers
 
-    ZC --> Viewport
-    ZC -->|Subscribe| EB
+- **`CanvasInputController`** (`controllers/CanvasInputController.js`) — *all*
+  mouse/wheel interaction: click / shift-click / rubber-band selection, single
+  and multi drag, corner resize, rotation, right-drag pan, wheel zoom, edge
+  hover/select, the joinery menu + depth handles, path free-drawing with bezier
+  curves, and post-creation handle editing. It **writes** `InteractionState`,
+  calls store/selection methods, records commands, and asks `CanvasView` to
+  repaint. It owns no pixels and keeps no selection copies.
+- **`KeyboardShortcutController`** (`controllers/KeyboardShortcutController.js`)
+  — *all* canvas keys: `E` (toggle edge mode), `Escape` (cascading cancel),
+  `Enter` (finish path), arrow-key nudge, `Ctrl/Cmd+A/D`, `Delete`. (App-level
+  keys — save/open/undo/redo/new-tab — stay in `Application`.)
+- **`ViewportController`** (`controllers/ViewportController.js`) — pan, zoom
+  (clamped `[0.1, 5]`), and the `screenToWorld` / `worldToScreen` transforms.
+  It reads the per-tab `{x, y, zoom}` viewport through `SceneContext`, and
+  computes `baseZoom` (the "100%" that fits a 300 mm × 300 mm work area) on
+  resize. Emits `VIEWPORT_CHANGED`; it never calls render directly.
+- **`InteractionState`** (`controllers/InteractionState.js`) is the **ephemeral
+  view-model** shared controllers → passes: drag/selection-rect/resize/rotation
+  /path-draw/handle-edit/preview/joinery-handle state, plus grid + snap
+  settings and pressed keys. Never serialized, never in undo history, `reset()`
+  wholesale on tab switch. It uses the exact field names the old renderer used
+  so ported code reads naturally. `HitTestService` (`services/HitTestService.js`)
+  is the pure-query companion: "what shape/edge/handle is at this point?" —
+  no mutations, no events, no drawing.
 
-    subgraph "Interaction Layer"
-        DDM --> SH
-        DDM --> SR
-        Mouse[Mouse Events]
-        Keyboard[Keyboard Events]
-    end
+### SceneContext — how tab switches got trivial
 
-    CR -->|Canvas Events| Mouse
-    App[Application] -->|Shortcuts| Keyboard
-```
+`core/SceneContext.js` is a **lazy accessor** of the active tab's scene. Its
+getters (`scene`, `shapeStore`, `parameterStore`, `bindingResolver`,
+`selection`, `viewport`, `history`) resolve *live* through `TabManager` on every
+access. Components hold the `SceneContext`, not the stores, so switching tabs
+requires no re-wiring — subscribers to `TAB_SWITCHED` just re-render. This
+eliminated the old `Application.updateComponentsForNewScene` field-poking that
+had to reach into every component and swap its cached store references on each
+switch. (A few older panels still cache stores and are updated explicitly; they
+are being migrated to `SceneContext`.)
 
-### Component Lifecycle
-
-```mermaid
----
-config:
-  layout: elk
----
-stateDiagram-v2
-    [*] --> Created: new Component()
-    Created --> Mounted: mount()
-    Mounted --> Rendered: render()
-    Rendered --> Updated: state change
-    Updated --> Rendered: render()
-    Rendered --> Unmounted: unmount()
-    Unmounted --> [*]
-
-    note right of Mounted
-        - Attach to DOM
-        - Subscribe to events
-        - Initialize state
-    end note
-
-    note right of Rendered
-        - Update DOM
-        - Reflect current state
-    end note
-
-    note right of Unmounted
-        - Clean up listeners
-        - Remove from DOM
-        - Release resources
-    end note
-```
+The `TabManager` source is passed to `SceneContext` as a *function*
+(`() => this.tabManager`) because `Application` swaps its `TabManager` instance
+on load/import — the closure keeps the context from going stale.
 
 ---
 
-## 11. Blocks Editor Bidirectional Flow
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart LR
-  subgraph BlocksUI["Blocks Editor UI (Blockly)"]
-    BE["BlocksEditor"]
-    WS["Blockly Workspace"]
-  end
-
-  subgraph CanvasUI["Canvas UI"]
-    CR["CanvasRenderer"]
-  end
-
-  subgraph Core["Core/Data"]
-    SS["ShapeStore"]
-    SR["ShapeRegistry"]
-    EB["EventBus"]
-  end
-
-  WS --> BE
-  BE -->|run blocks| SR
-  SR -->|create shape| SS
-  SS -->|emit SHAPE_ADDED| EB
-  EB -->|notify| CR
-  EB -->|notify| BE
-  BE -->|add block for new shape| WS
-```
-
-**Notes**
-1. Blocks → Canvas: user clicks **Add Shapes**, BlocksEditor reads the Blockly workspace, creates shapes via ShapeRegistry, and adds them to ShapeStore.
-2. Canvas → Blocks: whenever ShapeStore emits `SHAPE_ADDED` (from any source), BlocksEditor appends a new block representing that shape.
-3. CanvasRenderer listens to `SHAPE_ADDED` and re-renders the canvas.
-
----
-
-## 14. Editor Sync Connector
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart LR
-  subgraph Editors["Editors"]
-    CE["CodeEditor"]
-    BE["BlocksEditor"]
-  end
-
-  subgraph Connector["EditorSyncConnector (Mediator)"]
-    ESC["Sync Mediator"]
-  end
-
-  subgraph Core["Core & Runtime"]
-    CR["CodeRunner"]
-    SS["ShapeStore / ParameterStore"]
-    EB["EventBus"]
-    Canvas["CanvasRenderer"]
-  end
-
-  CE <-->|CODE_UPDATED / CODE_EXECUTED| ESC
-  BE <-->|BLOCKS_UPDATED / BLOCKS_EXECUTED| ESC
-  ESC -->|syncFromCode| BE
-  ESC -->|setCode no run| CE
-
-  CE -->|Run| CR
-  BE -->|Run| CR
-  CR --> SS
-  SS --> EB
-  EB --> Canvas
-  EB --> CE
-
-```
-
-**Design Patterns**
-1. **Mediator Pattern**: `EditorSyncConnector` centralizes coordination so CodeEditor and BlocksEditor never call each other directly.
-2. **Observer Pattern**: `EventBus` distributes `CODE_UPDATED`, `CODE_EXECUTED`, `BLOCKS_UPDATED`, `BLOCKS_EXECUTED` events.
-3. **Adapter Pattern**: Blockly generators and AST-to-block builders adapt between text AST and visual blocks.
-
----
-
-## 15. Resize Handles & Shape Resizing
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart LR
-  Canvas["CanvasRenderer"]
-  Handles["Corner Handles"]
-  Strategy["ShapeResizeStrategies (Strategy)"]
-  Shape["Shape Instance"]
-  Bus["EventBus"]
-
-  Canvas -->|hit test| Handles
-  Handles -->|start resize| Canvas
-  Canvas -->|select strategy| Strategy
-  Strategy -->|apply bounds| Shape
-  Canvas -->|PARAM_CHANGED| Bus
-```
-
-**What happens**
-1. The four corner brackets act as resize handles. Mouse-down on a corner starts a resize drag.
-2. CanvasRenderer computes new bounds from the dragged corner and asks a shape-specific strategy to apply those bounds.
-3. During resize, selection overlays (brackets + dimension labels) read **live mutable shape bounds** so measurements stay accurate while dragging.
-4. The shape updates live while dragging, then emits `PARAM_CHANGED` on mouse-up so Code and Blocks sync.
-
-**Design Pattern: Strategy**
-- **What**: Each shape type has a resizing strategy in `ShapeResizeStrategies` that translates bounding-box changes into shape parameters.
-- **Why**: It keeps CanvasRenderer generic and makes it easy to add/modify resize rules per shape without touching input-handling code.
-
----
-
-## 8. Shape & Binding System
-
-```mermaid
----
-config:
-  layout: elk
----
-classDiagram
-    class Shape {
-        <<abstract>>
-        +string id
-        +string type
-        +Position position
-        +Map bindings
-        +getBindableProperties()
-        +setBinding(property, binding)
-        +getBinding(property)
-        +resolve(paramStore, resolver)
-        +render(ctx)
-        +getBounds()
-        +containsPoint(x, y)
-        +clone()
-        +toJSON()
-    }
-
-    class Circle {
-        +number centerX
-        +number centerY
-        +number radius
-        +getBindableProperties()
-        +render(ctx)
-        +getBounds()
-        +containsPoint(x, y)
-    }
-
-    class Rectangle {
-        +number x
-        +number y
-        +number width
-        +number height
-        +getBindableProperties()
-        +render(ctx)
-        +getBounds()
-        +containsPoint(x, y)
-    }
-
-    class Line {
-        +number x1
-        +number y1
-        +number x2
-        +number y2
-        +getBindableProperties()
-        +render(ctx)
-        +getBounds()
-        +containsPoint(x, y)
-    }
-
-    class PathShape {
-        +Point[] points
-        +number strokeWidth
-        +boolean closed
-        +boolean[] curveSegments
-        +getBindableProperties()
-        +render(ctx)
-        +getBounds()
-        +containsPoint(x, y)
-    }
-
-    class ShapeRegistry {
-        <<static>>
-        -Map registry
-        +register(type, createFn, fromJSONFn)
-        +create(type, position, options)
-        +fromJSON(json)
-        +isRegistered(type)
-        +getAvailableTypes()
-    }
-
-    class ShapeBuilder {
-        -string type
-        -string id
-        -Position position
-        -Map properties
-        -Map bindings
-        -Decorator[] decorators
-        +withId(id)
-        +at(x, y)
-        +withProperty(name, value)
-        +withBinding(property, binding)
-        +withDecorator(type, options)
-        +validate()
-        +build()
-    }
-
-    class Binding {
-        <<interface>>
-        +resolve(paramStore, bindingResolver)
-    }
-
-    class ParameterBinding {
-        -string parameterName
-        +resolve(paramStore, bindingResolver)
-    }
-
-    class ExpressionBinding {
-        -string expression
-        -string[] dependencies
-        +resolve(paramStore, bindingResolver)
-    }
-
-    class ProcessedBinding {
-        -Binding sourceBinding
-        -BindingHandler[] handlers
-        +resolve(paramStore, bindingResolver)
-    }
-
-    class BindingHandler {
-        <<interface>>
-        +process(value)
-    }
-
-    class ClampHandler {
-        -number min
-        -number max
-        +process(value)
-    }
-
-    class RoundHandler {
-        -number decimals
-        +process(value)
-    }
-
-    class ShapeDecorator {
-        <<abstract>>
-        -Shape wrappedShape
-        +render(ctx)
-    }
-
-    class FillDecorator {
-        -string color
-        +render(ctx)
-    }
-
-    class BorderDecorator {
-        -string color
-        -number width
-        +render(ctx)
-    }
-
-    class ShadowDecorator {
-        -number blur
-        -string color
-        +render(ctx)
-    }
-
-    Shape <|-- Circle
-    Shape <|-- Rectangle
-    Shape <|-- Line
-    Shape <|-- PathShape
-    Shape --> Binding
-
-    Binding <|.. ParameterBinding
-    Binding <|.. ExpressionBinding
-    Binding <|.. ProcessedBinding
-
-    ProcessedBinding --> Binding
-    ProcessedBinding --> BindingHandler
-
-    BindingHandler <|.. ClampHandler
-    BindingHandler <|.. RoundHandler
-
-    ShapeRegistry ..> Shape : creates
-    ShapeBuilder ..> Shape : builds
-    ShapeBuilder --> ShapeRegistry
-
-    ShapeDecorator <|-- FillDecorator
-    ShapeDecorator <|-- BorderDecorator
-    ShapeDecorator <|-- ShadowDecorator
-    ShapeDecorator --> Shape : wraps
-```
-
-### Binding Resolution Flow
-
-```mermaid
-flowchart TB
-    Start[Shape with Bindings] --> BR[BindingResolver]
-    BR --> Check{Has Binding?}
-
-    Check -->|Yes| GetBinding[Get Binding]
-    Check -->|No| UseDefault[Use Default Value]
-
-    GetBinding --> Type{Binding Type?}
-
-    Type -->|Parameter| PB[ParameterBinding]
-    Type -->|Expression| EB[ExpressionBinding]
-    Type -->|Processed| PRB[ProcessedBinding]
-
-    PB --> PS[Get from ParameterStore]
-    EB --> Eval[Evaluate Expression]
-    PRB --> SB[Resolve Source Binding]
-
-    Eval --> Deps[Get Dependencies from ParameterStore]
-    Deps --> Calc[Calculate Result]
-
-    SB --> Handlers[Apply Handlers Chain]
-    Handlers --> Clamp[ClampHandler]
-    Clamp --> Round[RoundHandler]
-    Round --> Final
-
-    PS --> Final[Final Value]
-    Calc --> Final
-    UseDefault --> Final
-
-    Final --> ResolvedShape[Resolved Shape]
-    ResolvedShape --> Render[Render to Canvas]
-```
-
----
-
-## 9. Plugin System Architecture
-
-```mermaid
-graph TB
-    subgraph "Plugin System"
-        PM[PluginManager]
-        PA[PluginAPI]
-
-        subgraph "Plugin Lifecycle"
-            Load[Load Plugin]
-            Init[Initialize]
-            Register[Register Features]
-            Active[Active]
-            Unload[Unload]
-        end
-
-        subgraph "Plugin Capabilities"
-            RS[Register Shapes]
-            RC[Register Commands]
-            RB[Register Bindings]
-            UI[Add UI Elements]
-            Hooks[Register Hooks]
-        end
-    end
-
-    subgraph "Core System"
-        SR[ShapeRegistry]
-        CR_Core[CommandRegistry]
-        BR_Core[BindingRegistry]
-        EB[EventBus]
-        App[Application]
-    end
-
-    PM --> PA
-    PA --> SR
-    PA --> CR_Core
-    PA --> BR_Core
-    PA --> EB
-    PA --> App
-
-    Load --> Init
-    Init --> Register
-    Register --> Active
-    Active --> Unload
-
-    Register --> RS
-    Register --> RC
-    Register --> RB
-    Register --> UI
-    Register --> Hooks
-
-    RS --> SR
-    RC --> CR_Core
-    RB --> BR_Core
-    UI --> App
-    Hooks --> EB
-```
-
-### Plugin Example
-
-```mermaid
-classDiagram
-    class Plugin {
-        <<abstract>>
-        +string name
-        +string version
-        +string[] dependencies
-        +init(api)
-        +destroy()
-    }
-
-    class PluginAPI {
-        -Application app
-        -ShapeRegistry shapeRegistry
-        -CommandRegistry commandRegistry
-        -BindingRegistry bindingRegistry
-        -EventBus eventBus
-        +registerShape(type, createFn, fromJSONFn)
-        +registerCommand(name, CommandClass)
-        +registerBinding(type, BindingClass)
-        +subscribeEvent(event, callback)
-        +addMenuItem(config)
-        +addToolbarButton(config)
-    }
-
-    class PluginManager {
-        -Plugin[] plugins
-        -PluginAPI api
-        +register(plugin)
-        +load(pluginId)
-        +unload(pluginId)
-        +getPlugin(pluginId)
-        +getAllPlugins()
-    }
-
-    class CustomShapePlugin {
-        +string name
-        +init(api)
-        +destroy()
-        -registerTriangle()
-        -registerPentagon()
-    }
-
-    PluginManager --> PluginAPI
-    PluginManager --> Plugin
-    Plugin <|-- CustomShapePlugin
-    PluginAPI --> ShapeRegistry
-    PluginAPI --> CommandRegistry
-```
-
----
-
-## 10. Command & History System
-
-```mermaid
-graph TB
-    subgraph "Command Pattern"
-        CMD[Command Interface]
-
-        subgraph "Concrete Commands"
-            CreateShape[CreateShapeCommand]
-            DeleteShape[DeleteShapeCommand]
-            MoveShape[MoveShapeCommand]
-            UpdateParam[UpdateParameterCommand]
-        end
-
-        CMD -.->|Implements| CreateShape
-        CMD -.->|Implements| DeleteShape
-        CMD -.->|Implements| MoveShape
-        CMD -.->|Implements| UpdateParam
-    end
-
-    subgraph "Command Registry"
-        CR[CommandRegistry]
-        History[Command History]
-        Index[History Index]
-
-        CR --> History
-        CR --> Index
-    end
-
-    subgraph "Memento Pattern"
-        Originator[SceneState]
-        Memento[SceneMemento]
-        Caretaker[SceneHistory]
-
-        Originator -->|createMemento| Memento
-        Memento -->|restoreMemento| Originator
-        Caretaker --> Memento
-    end
-
-    CreateShape --> CR
-    DeleteShape --> CR
-    MoveShape --> CR
-    UpdateParam --> CR
-
-    CR -->|Execute| Originator
-    Originator -->|Save State| Caretaker
-
-    subgraph "User Actions"
-        Undo[Undo Ctrl+Z]
-        Redo[Redo Ctrl+Y]
-    end
-
-    Undo --> Caretaker
-    Redo --> Caretaker
-    Caretaker --> Originator
-```
-
-### History System Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant App
-    participant History as SceneHistory
-    participant Scene as SceneState
-    participant Store as ShapeStore/ParameterStore
-
-    User->>App: Perform Action (Add Shape)
-    App->>Store: add(shape)
-    Store->>EventBus: emit(SHAPE_ADDED)
-    EventBus->>App: notify
-    App->>Scene: createMemento()
-    Scene->>Scene: serialize state
-    Scene-->>App: SceneMemento
-    App->>History: push(memento)
-
-    Note over History: Stack: [M1, M2, M3]<br/>Index: 2
-
-    User->>App: Undo (Ctrl+Z)
-    App->>History: undo()
-    History-->>App: previous memento (M2)
-    App->>Scene: restoreMemento(M2)
-    Scene->>Store: restore shapes
-    Scene->>Store: restore parameters
-    Store->>EventBus: emit events
-    EventBus->>UI: update components
-
-    Note over History: Stack: [M1, M2, M3]<br/>Index: 1
-
-    User->>App: Redo (Ctrl+Y)
-    App->>History: redo()
-    History-->>App: next memento (M3)
-    App->>Scene: restoreMemento(M3)
-    Scene->>Store: restore shapes
-    Scene->>Store: restore parameters
-    Store->>EventBus: emit events
-
-    Note over History: Stack: [M1, M2, M3]<br/>Index: 2
-```
-
----
-
-## 12. Edge Selection System
-
-The Edge Selection System allows users to select individual edges (sides) of any shape. Since all shapes are defined as paths using the geometry library, edges can be extracted and manipulated independently.
-
-### Edge Selection Architecture
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart TB
-    subgraph GeometryLayer["Geometry Layer (src/geometry/edge/)"]
-        Edge["Edge Class"]
-        EdgeSelection["EdgeSelection"]
-        EdgeHitTest["EdgeHitTest"]
-        EdgeHighlight["EdgeHighlight"]
-        EdgeHelpers["edgeHelpers"]
-    end
-
-    subgraph CoreLayer["Core Layer"]
-        ShapeStore["ShapeStore"]
-        EventBus["EventBus"]
-    end
-
-    subgraph UILayer["UI Layer"]
-        CanvasRenderer["CanvasRenderer"]
-        PropertiesPanel["PropertiesPanel"]
-    end
-
-    Edge --> EdgeSelection
-    EdgeHelpers --> Edge
-    EdgeHitTest --> Edge
-    EdgeHighlight --> Edge
-
-    ShapeStore --> EdgeSelection
-    ShapeStore --> EventBus
-
-    CanvasRenderer --> EdgeHitTest
-    CanvasRenderer --> EdgeHighlight
-    CanvasRenderer --> EventBus
-
-    PropertiesPanel --> ShapeStore
-    PropertiesPanel --> EventBus
-
-    User["User Interaction"] --> CanvasRenderer
-    CanvasRenderer -->|"hitTestEdge()"| EdgeHitTest
-    EdgeHitTest -->|"Edge found"| ShapeStore
-    ShapeStore -->|"EDGE_SELECTED"| EventBus
-    EventBus -->|"notify"| CanvasRenderer
-    EventBus -->|"notify"| PropertiesPanel
-```
-
-### Edge Module Structure
-
-```
-src/geometry/edge/
-├── Edge.js           # Core Edge class (segment between two anchors)
-├── EdgeSelection.js  # Manages selection state for edges
-├── EdgeHitTest.js    # Hit testing utilities for edge detection
-├── EdgeHighlight.js  # Visual rendering for edge highlights
-├── edgeHelpers.js    # Utility functions for edge extraction
-├── index.js          # Module exports
-└── tests/
-    └── Edge.test.js  # Unit tests
-```
-
-### Edge Joinery Context Menu
-
-The Edge Joinery context menu is a lightweight UI overlay triggered by right-clicking a hit-tested edge on the canvas. The menu lives outside the canvas and is owned by `CanvasRenderer`, which passes the hit edge into `EdgeJoineryMenu` for configuration.
-
-Key responsibilities:
-- `CanvasRenderer`: performs edge hit testing on right-click and opens the menu.
-- `EdgeJoineryMenu`: displays joint type options and collects parameters (thickness in mm and finger count).
-- `ShapeStore`: stores joinery metadata keyed by edge identity (`shapeId:pathIndex:index`) so it can persist across saves.
-- `CanvasRenderer`: renders a lightweight joinery preview overlay on the edge based on stored metadata.
-
-Joinery parameters:
-- `type`: `finger_male` (outgoing) or `finger_female` (ingoing).
-- `thicknessMm`: depth of the fingers in millimeters.
-- `fingerCount`: number of fingers along the edge (minimum 2).
-
-Data flow:
-1. User right-clicks an edge on canvas.
-2. `CanvasRenderer.hitTestEdge()` returns an `Edge` and opens `EdgeJoineryMenu`.
-3. User selects joint type, thickness, and finger count.
-4. `ShapeStore.setEdgeJoinery(edge, data)` stores joinery metadata and emits `EDGE_JOINERY_CHANGED`.
-5. `CanvasRenderer` re-renders and draws a joinery preview along the edge.
-
-Joinery preview flow:
-
-```mermaid
-flowchart LR
-    User["User"] -->|"Right-click edge"| CR["CanvasRenderer"]
-    CR -->|"Hit test edge"| EJM["EdgeJoineryMenu"]
-    EJM -->|"Apply joinery params"| SS["ShapeStore"]
-    SS -->|"EDGE_JOINERY_CHANGED"| EB["EventBus"]
-    EB -->|"notify"| CR
-    CR -->|"renderEdgeJoinery()"| Canvas["Canvas"]
-```
-
----
-
-## 13. Text-Based Programming System
-
-The Otto programming module provides a text-based language for parametric shape creation. Ported from Otto-main copy and adapted to work with Otto v2's shape and geometry systems.
-
-### Architecture Overview
-
-```mermaid
-flowchart LR
-    subgraph Programming["Programming Module"]
-        Lexer["Lexer"]
-        Parser["Parser"]
-        AST["AST"]
-        Interpreter["Interpreter"]
-        Visitors["Visitors"]
-        Environment["Environment"]
-    end
-    
-    Code["Source Code"] --> Lexer
-    Lexer --> |Tokens| Parser
-    Parser --> AST
-    AST --> Interpreter
-    Interpreter --> Visitors
-    Visitors --> Environment
-    Environment --> |Shapes/Params| Result["Result"]
-```
-
-### Components
-
-| File | Purpose |
-|------|---------|
-| `Lexer.js` | Tokenizes source code into tokens (keywords, identifiers, numbers, operators) |
-| `Parser.js` | Builds Abstract Syntax Tree (AST) from tokens |
-| `Interpreter.js` | Executes AST using Visitor pattern |
-| `InterpreterVisitors.js` | Specialized visitors for expressions, shapes, control flow, etc. |
-| `Environment.js` | Scoped variable storage with frames (parameters, shapes, layers) |
-| `TurtleDrawer.js` | Logo-style turtle graphics for path drawing |
-| `BooleanOperators.js` | Polygon clipping operations (union, difference, intersection) using ClipperLib |
-
-### Language Syntax
-
-```javascript
-// Parameters
-param size = 50
-param count = 5
-
-// Shapes
-shape myCircle = circle { radius: size }
-shape myRect = rectangle { width: 100, height: 80 }
-shape myStar = star { outerRadius: 50, innerRadius: 25, points: count }
-
-// Transforms
-transform myCircle {
-    position: [100, 100]
-    rotation: 45
-    scale: [1.5, 1.5]
-}
-
-// Boolean Operations
-union result = myCircle, myRect
-difference hole = myRect, myCircle
-intersection overlap = myCircle, myRect
-
-// Control Flow
-for i from 0 to 5 {
-    shape circle_{i} = circle { radius: 10 + i * 5 }
-}
-
-if size > 30 {
-    shape largeShape = circle { radius: size }
-}
-
-// Functions
-def createGear(teeth, size) {
-    shape gear = gear { teeth: teeth, pitchDiameter: size }
-    return gear
-}
-
-// Turtle Graphics (Draw)
-draw myPath {
-    forward 100
-    right 90
-    forward 50
-    left 45
-    backward 25
+## 2. Declarative shape schema
+
+Every concrete shape class declares two statics and nothing more of the
+property boilerplate:
+
+```js
+export class Circle extends Shape {
+    static type = 'circle';
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        radius:  { type: 'number', default: 20, bindable: true, min: 0, label: 'Radius' }
+    };
+    // geometry only: getBounds(), containsPoint(), render(), toGeometryPath()
 }
 ```
 
-### Supported Shape Types
+The `Shape` base class (`models/shapes/Shape.js`) **derives everything
+property-shaped** from the merged schema — `Shape.fullSchema = { ...SCHEMA,
+...COMMON_SCHEMA }` (frozen + cached per class):
 
-All shapes use our geometry library conventions:
+- **constructor** — resolves each property from options in priority order
+  *direct name → aliases → descriptor default* (the default may be a function of
+  the options, letting geometry anchor to the drop `position`);
+- `getBindableProperties()` — schema keys where `bindable`, in declaration
+  order (drives the Properties Panel field list, `resolve()`, and `toJSON()`);
+- `resolve(parameterStore, bindingResolver)` — Template Method: clones the
+  shape and overwrites each bound property with its evaluated value; the stored
+  shape is never mutated (called once per frame per shape);
+- `clone()` / `toOptions()` — deep copy incl. active bindings;
+- `translate(dx, dy)` — shifts every property whose descriptor has a
+  `translate: 'x' | 'y'` role (replaces the old per-type center-vs-origin
+  branching in drag/nudge code);
+- `toJSON()` / `fromJSON()` — schema-driven serialization (see below).
 
-| Shape | Parameters |
-|-------|------------|
-| `circle` | `radius` |
-| `rectangle` | `width`, `height` |
-| `triangle` | `base`, `height` |
-| `ellipse` | `radiusX`, `radiusY` |
-| `polygon` | `radius`, `sides` |
-| `star` | `outerRadius`, `innerRadius`, `points` |
-| `arc` | `radius`, `startAngle`, `endAngle` |
-| `roundedRectangle` | `width`, `height`, `radius` |
-| `donut` | `outerRadius`, `innerRadius` |
-| `cross` | `width`, `thickness` |
-| `gear` | `pitchDiameter`, `teeth`, `pressureAngle` |
-| `spiral` | `startRadius`, `endRadius`, `turns` |
-| `wave` | `width`, `amplitude`, `frequency` |
-| `slot` | `length`, `width` |
-| `arrow` | `length`, `headWidth`, `headLength` |
-| `chamferRectangle` | `width`, `height`, `chamfer` |
+**PropertyDescriptor fields** (all in `models/shapes/schema.js`): `type`
+(editor hint), `default` (value or `(options) => value`), `bindable`,
+`translate` role, `aliases` (AQUI snake_case / legacy names), `min` / `max` /
+`step` / `label` / `unit`, `copy` (deep-copier for reference-typed values like
+point arrays), `serialize` (JSON transform), `alwaysSerialize` (write the
+literal even when bound — used where the value IS the geometry, e.g. Line
+endpoints), `omitIfDefault` (skip write when still equal to the static default),
+`omitIfNull`.
 
-### Design Patterns Used
+**`COMMON_SCHEMA`** is merged **after** each class's own schema (so class
+properties serialize first, common ones last — preserving the exact 1.0.0 key
+order) and adds three properties to *every* shape:
 
-1. **Visitor Pattern**: Interpreter uses visitors for each AST node type
-2. **Scope Chain**: Environment uses frame-based scoping with parent lookup
-3. **Factory Pattern**: ShapeGenerators create point arrays for boolean operations
-4. **Strategy Pattern**: Different visitors handle different node types
-5. **Mediator Pattern**: EditorSyncConnector orchestrates Code ↔ Blocks ↔ Canvas synchronization
-6. **Observer Pattern**: EventBus propagates editor and scene change events
+- `rotation` (default `0`) — previously a special case that `toJSON()` silently
+  dropped, so rotations did not survive save/load; now bindable, resolved
+  generically, and persisted `omitIfDefault`;
+- `depth` (default `3` mm, `min 0.5`) and `z` (default `0` mm) — the 2.5D
+  properties (section 4).
 
----
-
-## Part 2: Geometry Library Architecture
-
-## 16. Geometry Library Overview
-
-This library provides comprehensive 2D geometry primitives and operations for parametric design:
-- Vector math and transformations
-- Bezier curves and paths
-- Boolean operations on shapes
-- SVG import/export
-- Canvas rendering
-
----
-
-## 17. Module Dependency Graph
-
-```
-Layer 1: Foundation (no dependencies)
-├── constants.js    - Mathematical constants, tolerances
-├── math.js         - Trigonometry, interpolation, comparison utilities
-└── util.js         - Array helpers (range, pairs, rotateArray)
-
-Layer 2: Core Primitives
-├── Vec.js          - 2D vector class (depends on: constants, math)
-└── Matrix.js       - AffineMatrix, Transform (depends on: constants, math, Vec)
-
-Layer 3: Support Types
-├── BoundingBox.js  - Axis-aligned bounding box (depends on: Vec)
-├── Color.js        - RGBA/HSV color (depends on: math)
-└── Style.js        - Stroke, Fill classes (depends on: Color)
-
-Layer 4: Geometry Base
-├── Geometry.js     - Abstract base class (depends on: Vec, Matrix, BoundingBox, Style)
-└── Anchor.js       - Path anchor points (depends on: Vec, Matrix, BoundingBox, Geometry)
-
-Layer 5: Curve Mathematics
-├── bezier.js       - Bernstein polynomials, root finding (depends on: Vec)
-└── Segment.js      - Line/Cubic operations, intersections (depends on: Vec, Anchor, bezier, BoundingBox)
-
-Layer 6: Path System
-└── Path.js         - Main path class (depends on: Anchor, Segment, Matrix, BoundingBox, Style, Geometry)
-
-Layer 7: Complex Geometry
-├── Shape.js        - Multi-path shapes (depends on: Path, pathkit)
-├── Group.js        - Geometry container (depends on: Path, Shape, Geometry)
-└── Axis.js         - Axis helper (depends on: Vec, Geometry)
-
-Layer 8: I/O & Rendering
-├── canvas.js       - Canvas 2D rendering (depends on: Path, Shape, Style)
-├── svg.js          - SVG import/export (depends on: Path, Shape, Style)
-└── pathkit.js      - Skia PathKit wrapper (external dependency)
-
-Layer 9: Entry Point
-└── index.js        - Re-exports all public APIs
-```
-
-## Build Order
-
-Files must be created in dependency order:
-
-| Phase | Files | Description |
-|-------|-------|-------------|
-| 1 | constants, math, util | Foundation - no deps |
-| 2 | Vec, Matrix | Core primitives |
-| 3 | BoundingBox, Color, Style | Support types |
-| 4 | Geometry, Anchor | Geometry base |
-| 5 | bezier, Segment | Curve math |
-| 6 | Path | Path system |
-| 7 | Shape, Group, Axis | Complex geometry |
-| 8 | canvas, svg, pathkit | I/O & rendering |
-| 9 | index | Entry point |
+**Payoff:** adding a property to a shape (or to all shapes) is now **one schema
+line** instead of edits to ~5 methods per class (~40 edit sites in the old
+design). `ShapeRegistry.registerClass(cls)` registers a shape purely from its
+static `type` + `SCHEMA`; a static block registers the 18 built-ins, and the
+`SHAPE_TYPE_REGISTERED` event is gated so that bulk registration stays quiet
+and only later (plugin) registrations fire it.
 
 ---
 
-## 18. API Conventions
+## 3. Command system and undo
 
-### Mutating Methods
-Methods that begin with a **verb** mutate the object and return `this` for chaining:
+The old memento system — which serialized the **entire scene** ~300 ms after
+every event and threw the stack away on tab switch — is **deleted**. Undo is
+now a granular command system.
 
-```javascript
-const v = new Vec(1, 2);
-v.add(new Vec(3, 4));     // v is now {x: 4, y: 6}
-v.mulScalar(2).rotate(90); // Chaining
-```
+- **`Command`** (`commands/Command.js`) — `execute(scene)` applies a change,
+  `undo(scene)` reverts it *exactly*; both may be async. Commands mutate
+  **only** through store APIs (so the stores emit their normal events and every
+  observer updates for free), capture the state they need as **plain JSON**
+  (never live references), and may implement `coalesceWith(next)` to merge rapid
+  same-target commands into one history entry. `CompositeCommand` batches
+  several commands as one entry.
+- **`HistoryManager`** (`commands/HistoryManager.js`) — **per-tab**: each `Tab`
+  owns one bound to its `SceneState`, so undo history **survives tab switches**.
+  Capped at 100 entries. Three entry paths:
+  - `execute(cmd)` — run then push (normal);
+  - `record(cmd)` — push **without** running (interactive gestures apply their
+    mutations live, frame by frame; the command already captured before/after
+    state and just needs to exist for undo/redo);
+  - `beginBatch(label)` / `endBatch()` — group into one `CompositeCommand`.
 
-### Cloning
-Use `clone()` when you need a copy:
-
-```javascript
-const original = new Vec(1, 2);
-const copy = original.clone().mulScalar(2);
-// original unchanged: {x: 1, y: 2}
-// copy: {x: 2, y: 4}
-```
-
-### Static Factory Methods
-Classes provide static methods for common construction patterns:
-
-```javascript
-Vec.fromAngle(45);              // Unit vector at 45 degrees
-Path.fromPoints([...]);         // Path from point array
-AffineMatrix.fromRotation(90);  // Rotation matrix
-```
-
-### Validation
-Classes provide `isValid()` instance method and static `isValid(value)`:
-
-```javascript
-const v = new Vec(1, 2);
-v.isValid();          // true
-Vec.isValid(v);       // true
-Vec.isValid({x:1});   // false
-```
-
-## Path Time System
-
-Positions along paths use a "time" value:
-- Integer part = anchor index
-- Fractional part = position between anchors
-
-```
-Anchors:  0-------1-------2-------3
-Time:     0       1       2       3
-               ^ time = 1.5 (midpoint of segment 1-2)
-```
-
-Convert between distance and time:
-```javascript
-const distance = path.length() * 0.5;  // Halfway along path
-const time = path.timeAtDistance(distance);
-const position = path.positionAtTime(time);
-```
-
----
-
-## 19. Geometry Library Implementation
-
-### Phase 1: Foundation
-- `constants.js` - 9 mathematical constants (PI, TAU, tolerances, precision)
-- `math.js` - 22 math functions (trig in degrees, interpolation, comparison)
-- `util.js` - 3 array utilities (range, pairs, rotateArray)
-- **Tests**: 128 total (16 + 85 + 27)
-
-### Phase 2: Core Primitives
-- `Vec.js` - 2D Vector class (~530 lines)
-- `Matrix.js` - AffineMatrix & Transform classes (~590 lines)
-- **Tests**: ~160 total
-
-### Phase 3: Support Types
-- `BoundingBox.js` - Axis-aligned bounding box (~180 lines)
-- `Color.js` - RGBA color with HSV conversion (~350 lines)
-- `Style.js` - Stroke and Fill classes (~160 lines)
-- **Tests**: 91 total (32 + 34 + 25)
-
-### Phase 4: Geometry Base
-- `Geometry.js` - Abstract base class (~240 lines)
-- `Anchor.js` - Path anchor points (~200 lines)
-- **Tests**: 27 total
-
-### Phase 5: Curve Mathematics
-- `bezier.js` - Bezier curve calculations (~300 lines)
-- `Segment.js` - Line/Cubic operations and intersections (~500 lines)
-- **Tests**: 46 total (23 + 23)
-
-### Phase 6: Path System
-- `Path.js` - Main path class with anchors, curves, and operations (~998 lines)
-- **Tests**: 50 total
-
-### Phase 7: Complex Geometry
-- `Shape.js` - Multi-path shapes with boolean ops (~450 lines)
-- `Group.js` - Geometry container (~370 lines)
-- `Axis.js` - Axis helper for alignment (~200 lines)
-- **Tests**: 93 total (34 + 33 + 26)
-
-### Phase 8: I/O & Rendering
-- `canvas.js` - Canvas rendering + hit testing
-- `svg.js` - SVG import/export
-- `units.js` - Unit conversion helpers
-- `random.js` - Seeded random helpers
-- **Tests**: canvas, svg, units, random
-
-### Phase 9: PathKit Stub
-- `pathkit.js` - PathKit initialization stub
-
-### Phase 10: Entry Point
-- `index.js` - Re-exports all public APIs + initCuttleGeometry()
-
-For detailed API documentation of each class, see the individual source files with JSDoc comments.
-
----
-
-## Part 3: Assembly Plan Architecture
-
-## 20. Assembly Plan Overview
-
-The Assembly Plan is a separate 3D view that lays out each canvas shape as an extruded piece on a desktop-like plane. Users can orbit the camera and drag pieces to rearrange them.
-
-### Goals (V1)
-- Separate page navigated via a toolbar button
-- 3D view powered by Three.js
-- Each 2D shape becomes a 3D piece with thickness `3 mm` by default
-- Pieces are laid out on a "desktop" plane and can be dragged freely
-
-### Defaults (V1)
-- Thickness: `3 mm`
-- Layout: grid strategy with spacing
-- Materials: neutral matte colors (per piece)
-- Default material: light brown `#D9B98C` for all pieces
-- Joinery transfer:
-  - Male joints: outward tabs (3D meshes)
-  - Female joints: hollow cutouts (holes in extruded geometry)
-  - Direction (in/out) derived from edge normal vs shape center
-
-### Folder Structure
-
-```
-src/assembly/
-├── AssemblyApp.js
-├── AssemblyScene.js
-├── AssemblyDataLoader.js
-├── AssemblyPieceFactory.js
-├── AssemblyLayout.js
-├── AssemblyInteraction.js
-├── AssemblyJoinery.js
-├── main.js
-└── three.js
-```
-
----
-
-## 21. Assembly Data Flow
+  Emits `HISTORY_CHANGED { canUndo, canRedo, label }` after every mutation, so
+  the toolbar undo/redo buttons update **without polling**.
 
 ```mermaid
 flowchart LR
-    Autosave[(LocalStorage autosave)] --> Loader[AssemblyDataLoader]
-    Loader --> SceneState[SceneState]
-    SceneState --> ShapeStore[ShapeStore]
-    ShapeStore --> Shapes[Resolved Shapes]
-    ShapeStore --> Joinery[Edge Joinery Metadata]
-
-    Shapes --> Factory[AssemblyPieceFactory]
-    Joinery --> Factory
-    Factory -->|female holes| Extrusion[ExtrudeGeometry]
-
-    Shapes --> Decorator[AssemblyJoineryDecorator]
-    Joinery --> Decorator
-    Decorator -->|male tabs| Meshes[Piece Meshes]
-
-    Extrusion --> Meshes
-    Meshes --> Scene[Three.js Scene]
+    G[User gesture<br/>drag / resize / nudge] -->|snapshot before| S1[before JSON]
+    G -->|apply live each frame| STORE[(ShapeStore)]
+    G -->|gesture end, snapshot after| S2[after JSON]
+    S1 & S2 --> MC[MutateShapesCommand]
+    MC -->|record: push, do NOT re-run| HM[HistoryManager<br/>per active tab]
+    HM -->|undo/redo| APPLY[replace shapes<br/>via store API]
+    APPLY -->|store emits SHAPE_UPDATED| EB[[EventBus]]
+    EB --> REPAINT[CanvasView repaints<br/>panels refresh]
+    HM -->|HISTORY_CHANGED| BTN[toolbar buttons]
 ```
 
-### Runtime Steps (V1)
-1. `AssemblyApp` loads autosave and builds `SceneState`.
-2. `AssemblyPieceFactory` uses **universal SVG-to-3D converter**:
-   - Gets geometry path via `shape.toGeometryPath()`
-   - Converts anchors with Bezier handles to THREE.js Shape
-   - Preserves smooth curves and exact geometry
-   - Extrudes each shape with **female holes** (if joinery exists)
-3. `AssemblyJoineryDecorator` adds **male tabs** on top of the piece mesh.
-4. `GridLayoutStrategy` positions pieces on the plane.
-5. `AssemblyInteraction` enables orbit and drag controls.
+**Command classes:**
 
-### Joinery Orientation Logic
-- Each edge provides anchors (p1, p2).
-- The outward normal is chosen by comparing edge midpoint vs. shape center.
-- Male tabs use the outward normal.
-- Female holes use the inward normal.
+| Command | Purpose |
+|---|---|
+| `AddShapeCommand` | add one shape (live instance first run; rebuilds from JSON on redo) |
+| `RemoveShapesCommand` | delete; undo restores paint order, joinery, and selection |
+| `DuplicateShapesCommand` | clone (keeps every property + binding), offset (20, 20), select copies |
+| `MutateShapesCommand` | **generic gesture**: drags/resizes/rotations/nudges via `{before, after}` snapshots, coalescing |
+| `SetBindingCommand` | attach/detach a parameter binding |
+| `SetShapePropertyCommand` | set a single property |
+| `AddParameterCommand` / `RemoveParameterCommand` | parameters |
+| `SetParameterValueCommand` | coalescing (slider drags merge) |
+| `UpdateParameterMetaCommand` | rename / min / max / step |
+| `SetEdgeJoineryCommand` | assign or clear edge joinery |
+| `ReplaceSceneCommand` | whole-scene `{before, after}` for coarse ops (code run, blocks run, clear-all) |
 
-### Limitations (V1)
-- Joinery cutouts are only applied for **closed shapes**.
-- Open paths are automatically closed for extrusion (may not match intended design).
-- No boolean CSG for male tabs (tabs are added as separate meshes).
-- Donut shapes use explicit holes (winding-rule holes not supported by THREE.js).
+`ReplaceSceneCommand` is the memento-style half of a deliberate **hybrid**: fine
+edits are granular commands; operations that rebuild the whole scene capture a
+before-snapshot on construction and an after-snapshot via `captureAfter()`, then
+are `record()`ed (with an `isNoop()` guard). The viewport is intentionally
+excluded from its snapshot.
 
----
+**`CommandCatalog`** (`commands/CommandCatalog.js`) is a `name → factory`
+registry (`shape.add`, `shape.mutate`, `param.setValue`, `scene.replace`, …)
+that backs plugin command registration and gives tooling a discoverable list.
+It replaces the never-instantiated `CommandRegistry` (whose separate history
+stack is superseded by the per-tab `HistoryManager`).
 
-## 22. Assembly Components
-
-### Design Patterns Used
-- **Facade Pattern**: `AssemblyApp` orchestrates scene creation, data loading, layout, interaction, and render loop.
-- **Builder Pattern**: `AssemblySceneBuilder` constructs the Three.js scene, camera, lights, and desktop plane.
-- **Factory Pattern**: `AssemblyPieceFactory` creates 3D meshes from 2D shape data.
-- **Strategy Pattern**: `GridLayoutStrategy` lays out pieces in rows with spacing.
-- **Decorator (Joinery)**: `AssemblyJoineryDecorator` overlays male joinery tabs on top of pieces.
-
-### Component Responsibilities
-
-#### AssemblyApp (Facade)
-- Initializes the scene builder, data loader, piece factory, layout strategy, and interaction.
-- Adds meshes to the scene and starts the render loop.
-
-#### AssemblyDataLoader (Repository-style)
-- Reads the autosave JSON from localStorage.
-- Extracts the active tab's shape list.
-- Normalizes missing properties with defaults.
-
-#### AssemblyPieceFactory (Factory)
-- **Universal SVG-to-3D converter**: Uses each shape's `toGeometryPath()` method to get the exact SVG path definition, then converts it directly to THREE.js Shape for perfect 2D-to-3D transfer.
-- Converts geometry path anchors (with Bezier curve handles) to THREE.js Shape commands, preserving smooth curves.
-- Automatically centers shapes for proper 3D positioning.
-- Supports all shapes that implement `toGeometryPath()`: rectangle, circle, polygon, star, line, path (with curves), triangle, ellipse, donut, roundedRectangle, chamferRectangle, arc, cross, slot, arrow, gear, spiral, wave, and any custom shapes.
-- Special handling:
-  - Rectangles with joinery use custom edge notches.
-  - Donut shapes use explicit holes (THREE.js doesn't support winding-rule holes).
-- Open paths are automatically closed for 3D extrusion.
-
-#### GridLayoutStrategy (Strategy)
-- Lays out pieces in a grid with consistent spacing.
-- Centers the resulting layout around origin.
-
-#### AssemblyInteraction
-- `OrbitControls` for camera navigation.
-- `DragControls` for moving pieces on the plane.
-
-#### AssemblyJoinery
-- Applies joinery metadata to edges.
-- Creates male tabs as separate meshes.
-- Creates female holes in extruded geometry.
-
-### Universal SVG-to-3D Conversion
-
-The `AssemblyPieceFactory` implements a universal converter (`shapeToThreeShape()`) that:
-
-1. **Gets the geometry path** from any shape via `toGeometryPath()` method
-2. **Extracts path anchors** with their Bezier curve handles (handleIn/handleOut)
-3. **Converts to THREE.js Shape** by:
-   - Centering the shape based on bounding box
-   - Converting each segment (line or Bezier curve) to THREE.js commands
-   - Preserving smooth curves via `bezierCurveTo()` with proper control points
-   - Closing open paths for 3D extrusion
-4. **Extrudes** the resulting shape with specified thickness
-
-This ensures **perfect transfer** from 2D SVG definitions to 3D extrusions, maintaining exact geometry including curves, corners, and complex paths.
-
-### Future Expansion
-- Real joinery-cut geometry in 3D (currently tabs are separate meshes).
-- Export assembly layouts to STL/OBJ formats.
-- Boolean CSG for male tabs integration.
-- Support for multi-path shapes with holes (beyond Donut).
+**Policy:** selection changes and viewport changes are **not** commands (not
+undoable) — the industry convention. Commands that delete shapes restore
+selection as part of their own `undo()`.
 
 ---
 
-## Summary
+## 4. 2.5D: depth and z
 
-This architecture document covers:
-- **System Architecture**: Core components, data flow, UI, persistence, plugins
-- **Geometry Library**: 2D geometry primitives, paths, shapes, rendering
-- **Assembly Plan**: 3D view for extruded pieces with joinery support
+Otto is a 2.5D environment: each flat piece has a thickness and can float above
+the work plane. Two bindable common properties carry this through the whole
+stack:
 
-All components use event-driven architecture with the EventBus pattern for decoupled communication. The system is extensible via plugins and registries.
+- **`depth`** — extrusion thickness in mm (default `3`, `min 0.5`);
+- **`z`** — elevation of the piece's base off the work plane in mm (default `0`).
+
+Both are ordinary bindable schema properties, so they flow *automatically*
+through: Properties Panel rows, serialization, the Blockly generic-property
+blocks, AQUI's `depth:` / `z:` params, and the 3D viewport.
+
+**AQUI integration required no lexer/parser change** — `depth:` and `z:` are
+just parameter names travelling the existing generic param path into shape
+options, where the schema picks them up like any other dimension.
+
+**2D rendering** paints z-sorted low-`z`-first (`ShapeStore.getResolvedSorted`)
+so higher pieces layer on top, and each raised piece (`z > 0`) casts a subtle
+**elevation drop-shadow** whose offset grows with `z` (capped). Hit-testing
+(`HitTestService.hitTest`) walks the same z-sorted list **topmost-first**, so
+the visually-front piece wins the click. The Selection Pass shows a depth/z
+badge on the selected shape.
+
+**Persistence:** `Serializer.VERSION` bumped **1.0.0 → 2.0.0** with a real
+migration chain (`persistence/Migrations.js`). Because `depth`/`z` are
+`omitIfDefault`, a default scene's wire format is **byte-identical to 1.0.0
+except the `version` field** — and the 1.0.0 → 2.0.0 migration is a pure version
+stamp (the schema supplies the defaults on load; pre-2.0.0 per-shape
+`thickness` fields are geometry, e.g. a Cross arm width, and are left
+untouched). This byte-stability is guarded by fixtures (section 10).
+
+---
+
+## 5. Live 3D viewport
+
+The old standalone **`assemble.html` page + `AssemblyApp` are retired**;
+`assemble.html` is now a redirect stub pointing at `index.html`.
+
+**`Viewport3D`** (`views/viewport3d/Viewport3D.js`) is an **embedded** 3D panel
+that is the live 2.5D model, not a one-shot export:
+
+- **Lazy-loaded** — Three.js (via import map) and the component are imported on
+  first open (`Application.toggle3D`), so the 2D editor's initial page load pays
+  nothing for the 3D stack. The render loop pauses (`stop()`) when the panel is
+  hidden.
+- **EventBus-subscribed + debounced sync** — it re-syncs on `SHAPE_*`,
+  `PARAM_CHANGED`, `EDGE_JOINERY_CHANGED`, `TAB_SWITCHED`, `SCENE_LOADED`
+  (150 ms debounce keeps slider drags smooth).
+- **Per-shape `geomKey` cache** — each piece is keyed by shape id and carries a
+  `geomKey` fingerprint of everything that affects geometry (type,
+  geometry-affecting props, `depth`, joinery — but **not** `z` or `rotation`,
+  which are pure transforms).
+- **`depth` → `ExtrudeGeometry` depth; `z` → mesh elevation.** In-place layout:
+  canvas x → world x, canvas y → world z.
+- **Read-only v1** — click a piece to select its shape; selecting in 2D
+  emissive-highlights the piece.
+
+```mermaid
+flowchart TD
+    EV[SHAPE_* / PARAM_CHANGED / …] --> DEB[scheduleSync<br/>150ms debounce]
+    DEB --> LOOP{for each resolved shape}
+    LOOP --> KEY[compute geomKey]
+    KEY --> CMP{cached key ==<br/>current key?}
+    CMP -->|yes| FAST[transform-only:<br/>move / elevate / rotate]
+    CMP -->|no| REBUILD[dispose old +<br/>MeshBuilder.build]
+    LOOP --> GONE[shapes no longer present<br/>→ dispose + remove]
+```
+
+**`MeshBuilder`** (`views/viewport3d/MeshBuilder.js`) wraps the retained
+`AssemblyPieceFactory` — the battle-tested universal `toGeometryPath →
+THREE.Shape` converter, including joinery teeth and female holes — rather than
+reimplementing it. Its 2.5D contribution is threading each shape's resolved
+`depth`/`z` into the factory (instead of the old hardcoded 3 mm) and computing
+the `geomKey`.
+
+---
+
+## 6. Plugins
+
+The `PluginManager` is now **instantiated in `Application.init()`** (it was
+previously dormant). Plugins are declared by the host page on
+`window.OTTO_PLUGINS` (an array of module paths or `Plugin` classes);
+`Application.initPlugins()` loads and activates them in the background, then
+fires the `app:init` hook.
+
+**`PluginAPI`** (`plugins/PluginAPI.js`) is the stable Facade over the internal
+subsystems (EventBus, ShapeRegistry, BindingRegistry, CommandCatalog, and the
+`SceneContext` as the live `sceneState`). Key methods:
+
+- **`registerShape`** accepts either a **schema-bearing class**
+  (`registerShape(ShapeClass)` → `ShapeRegistry.registerClass`) or the **legacy
+  triple** (`registerShape(type, createFn, fromJSONFn)`); registration fires
+  `SHAPE_TYPE_REGISTERED`, and `ShapeLibrary` re-renders.
+- **`registerCommand(name, CommandClass)`** adapts a command *class* into a
+  `CommandCatalog` factory (`(...args) => new CommandClass(...args)`), so
+  `new`-based plugins keep working.
+- **`executeCommand(name, ...args)`** builds the command from the catalog and
+  runs it through the **active tab's history**, so plugin commands participate
+  in undo/redo.
+- **Hooks** (separate from EventBus): `app:init`, `scene:loaded` (fires on load
+  *and* tab switch), `before-save`, `after-save`.
+
+---
+
+## 7. Accessibility
+
+The editor ships with a real accessibility layer, with reusable helpers in
+`src/ui/a11y/`:
+
+- **`LiveRegion`** — a polite `aria-live` announcer. Two instances: the
+  `#notification-region` (toast/status announcements) and a dedicated
+  `#canvas-status` region that announces canvas selection changes
+  (e.g. "Circle 3 selected, 1 of 5 shapes").
+- **`FocusTrap`** — keeps focus inside modal dialogs (used by the
+  `EdgeJoineryMenu`, which is a `role="dialog"`).
+- **`RovingTabindex`** — powers the Shape Library as an ARIA
+  `listbox`/`option`: arrow keys roam, and Enter/Space add the shape at the
+  viewport center by emitting `SHAPE_KEYBOARD_ADD`, which `Application` turns
+  into an undoable `AddShapeCommand`.
+
+Plus: ARIA landmarks (`toolbar` / `tablist` / `tabpanel` / `complementary` /
+`main`), `aria-label` + `aria-keyshortcuts` on toolbar buttons, a skip link, and
+a `.visually-hidden` utility. The left-panel tabs implement full WAI-ARIA
+tablist keyboard behavior (Left/Right/Home/End + roving tabindex).
+
+---
+
+## 8. EventBus
+
+`events/EventBus.js` is unchanged in spirit: a **true singleton** (private
+static `#instance`, constructor returns the existing instance) pub/sub with
+per-callback `try/catch` error isolation and a snapshot-on-emit that makes
+subscribe/unsubscribe safe during a dispatch. It remains the **only** channel
+between the core/model layer and the UI/view layer.
+
+What changed is the **`EVENTS` catalogue**. Events that were previously
+off-catalogue magic strings are now first-class entries
+(`SHAPE_DRAG_START` / `SHAPE_DRAG_END`, `DRAG_PREVIEW_UPDATE` /
+`DRAG_PREVIEW_CLEAR`), plus new events introduced by the refactor:
+
+`SHAPE_UPDATED`, `SHAPE_TYPE_REGISTERED`, `SHAPE_KEYBOARD_ADD`, `TOOL_CHANGED`,
+`HISTORY_CHANGED`, `PARAM_UPDATED`.
+
+---
+
+## 9. Geometry library
+
+`src/geometry/` (a cuttle-geometry port: `Vec` with `x`/`y`, `AffineMatrix` as
+a 2×3, `Path`, `Shape`, `Anchor`) is **unchanged and strictly 2D**. The 2.5D
+`depth`/`z` concepts live entirely in the **model** layer (COMMON_SCHEMA) and
+are consumed by the views (2D shadow/sort, 3D extrude/elevate) — they **never**
+enter the geometry library. Shapes build their canonical geometry via
+`toGeometryPath()`, the single source shared by bounds, hit-testing, 2D
+rendering, and the 3D mesh builder.
+
+---
+
+## 10. Testing
+
+Tests are a **hand-rolled harness** (no external framework), so they run
+anywhere:
+
+- **Node:** `node tests/run-node.js` (imports the manifest, runs, exits
+  non-zero on failure).
+- **Browser:** open `tests/run-tests.html`.
+
+Both runners share one module list (`tests/manifest.js`) and the same
+`tests/harness.js`. There are **47 tests across 6 suites**:
+
+| Suite | Focus |
+|---|---|
+| `serializer-roundtrip.test.js` | wire format + round-trip (7) |
+| `shape-schema.test.js` | schema-driven construct/clone/translate/toJSON (12) |
+| `canvas-stack.test.js` | MVC canvas stack / passes / frame (4) |
+| `commands.test.js` | commands + HistoryManager undo/redo/coalesce (12) |
+| `depth-z.test.js` | 2.5D depth/z flow + omit-if-default (8) |
+| `plugin-lifecycle.test.js` | plugin load/activate/register/hooks (4) |
+
+The **byte-fixture guards** are the backbone of the wire-format contract:
+`tests/fixtures/scene-v1.json` (version `1.0.0`) and `scene-v2.json`
+(version `2.0.0`) are loaded via the environment-agnostic `fixture-io.js`
+(reads from disk under Node, `fetch` in the browser) and asserted
+byte-for-byte, so any accidental change to serialization key order or the
+omit-if-default behavior fails loudly.
+
+---
+
+## 11. Deferred / documented debts
+
+These are known, deliberate trade-offs — documented so they are not mistaken
+for bugs:
+
+- **Autosave bypasses the storage abstraction.** `StorageManager` writes the
+  autosave directly to `localStorage` under the key `nova_otto_autosave`
+  (`StorageManager.AUTOSAVE_KEY`) rather than through the
+  `StorageBackend` / `StorageFactory` abstraction. Migrating it would change the
+  autosave key/format and break every existing local save, so the pluggable
+  backends serve export/import and future cloud sync instead.
+- **PathKit remains unloaded.** The geometry library's boolean ops use
+  fallbacks; the AQUI language's boolean ops use ClipperLib via CDN.
+- **Three parallel shape representations exist by design:**
+  1. `src/models/shapes/` — the **canonical editor models** (schema-driven,
+     this document's section 2);
+  2. `src/programming/Shapes.js` — the **interpreter-internal geometry backend**
+     for boolean/turtle ops;
+  3. the interpreter's **plain duck-typed objects** — a lightweight interchange
+     format, re-materialized into model shapes by `CodeRunner` via
+     `ShapeRegistry`.
+- **`ShapeStore` selection delegates.** `ShapeStore` still exposes thin
+  backward-compatible selection accessors/methods that proxy the
+  `SelectionModel`; new code should reach the `SelectionModel` through
+  `SceneContext`, and the remaining pre-MVC call sites are being migrated off
+  the delegates.
+- **A few panels still cache stores.** `PropertiesPanel`, `ParametersMenu`, the
+  editors, etc. still hold direct store references and are updated by
+  `Application.updateComponentsForNewScene` on tab switch; the canvas stack no
+  longer needs this (it resolves everything through `SceneContext`). These
+  panels migrate to `SceneContext` with the ongoing command-system work.
