@@ -174,49 +174,15 @@ export class CodeRunner {
     }
 
     /**
-     * Map interpreter params to ShapeRegistry options format
+     * Map interpreter params to ShapeRegistry options format.
+     *
+     * Snake_case AQUI names (pitch_diameter, corner_radius, …) are resolved
+     * by each shape's schema `aliases`, so params pass through untouched —
+     * only path point arrays need normalization into {x, y} objects.
      * @private
      */
     _mapParamsToOptions(type, params) {
         const options = { ...params };
-        
-        // Handle snake_case to camelCase conversions
-        if (params.pitch_diameter !== undefined) {
-            options.pitchDiameter = params.pitch_diameter;
-        }
-        if (params.pressure_angle !== undefined) {
-            options.pressureAngle = params.pressure_angle;
-        }
-        if (params.outer_radius !== undefined) {
-            options.outerRadius = params.outer_radius;
-        }
-        if (params.inner_radius !== undefined) {
-            options.innerRadius = params.inner_radius;
-        }
-        if (params.start_radius !== undefined) {
-            options.startRadius = params.start_radius;
-        }
-        if (params.end_radius !== undefined) {
-            options.endRadius = params.end_radius;
-        }
-        if (params.start_angle !== undefined) {
-            options.startAngle = params.start_angle;
-        }
-        if (params.end_angle !== undefined) {
-            options.endAngle = params.end_angle;
-        }
-        if (params.corner_radius !== undefined) {
-            options.cornerRadius = params.corner_radius;
-        }
-        if (params.head_width !== undefined) {
-            options.headWidth = params.head_width;
-        }
-        if (params.head_length !== undefined) {
-            options.headLength = params.head_length;
-        }
-        if (params.slot_width !== undefined) {
-            options.slotWidth = params.slot_width;
-        }
 
         if (type === 'path' && Array.isArray(params.points)) {
             options.points = this._normalizePathPoints(params.points);

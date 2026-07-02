@@ -1,10 +1,10 @@
 /**
  * @fileoverview Rectangle with rounded (circular-arc) corners.
  *
- * The cornerRadius is clamped to min(width/2, height/2) in the constructor so that no
- * single corner arc can exceed a full semicircle.  If width or height shrinks below
- * 2 * cornerRadius (e.g. via a parameter binding), the clamp prevents the arcs from
- * overlapping and producing a visually broken shape.
+ * The cornerRadius is stored as given; toGeometryPath() clamps the effective
+ * arc radius to min(width/2, height/2) so the corner arcs can never overlap,
+ * even when width or height shrinks below 2 * cornerRadius via a parameter
+ * binding.
  *
  * When cornerRadius is zero or negative the shape degenerates into a plain axis-aligned
  * rectangle and toGeometryPath() returns the native {@link GeoPath.rect} primitive for
@@ -42,43 +42,15 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class RoundedRectangle extends Shape {
-    /**
-     * @param {string}         id            - Unique shape identifier (e.g. "RoundedRectangle 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [x=0]             - X coordinate of the top-left corner.
-     * @param {number}         [y=0]             - Y coordinate of the top-left corner.
-     * @param {number}         [width=50]        - Width of the bounding rectangle.
-     * @param {number}         [height=50]       - Height of the bounding rectangle.
-     * @param {number}         [cornerRadius=5]  - Radius of each corner arc.  Clamped to
-     *        min(width/2, height/2) so that arcs never exceed a semicircle.
-     */
-    constructor(id, position = { x: 0, y: 0 }, x = 0, y = 0, width = 50, height = 50, cornerRadius = 5) {
-        super(id, 'roundedRectangle', position);
-        /** @type {number} X coordinate of the top-left corner. Bindable. */
-        this.x = x;
-        /** @type {number} Y coordinate of the top-left corner. Bindable. */
-        this.y = y;
-        /** @type {number} Width of the bounding rectangle. Bindable. */
-        this.width = width;
-        /** @type {number} Height of the bounding rectangle. Bindable. */
-        this.height = height;
-        /**
-         * @type {number} Corner arc radius. Bindable.
-         * Clamped at construction time to prevent arcs from exceeding a semicircle.
-         * Note: if width or height is later changed via a binding, the clamp is NOT
-         * re-applied automatically -- toGeometryPath() uses the stored value directly.
-         */
-        this.cornerRadius = Math.min(cornerRadius, width / 2, height / 2);
-    }
+    static type = 'roundedRectangle';
 
-    /**
-     * Declares which RoundedRectangle properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['x', 'y', 'width', 'height', 'cornerRadius']}.
-     */
-    getBindableProperties() {
-        return ['x', 'y', 'width', 'height', 'cornerRadius'];
-    }
+    static SCHEMA = {
+        x: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'X' },
+        y: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Y' },
+        width: { type: 'number', default: 50, bindable: true, min: 0, label: 'Width' },
+        height: { type: 'number', default: 50, bindable: true, min: 0, label: 'Height' },
+        cornerRadius: { type: 'number', default: 5, bindable: true, min: 0, label: 'Corner Radius', aliases: ['corner_radius', 'radius'] }
+    };
 
     /**
      * Compute the AABB by delegating to the geometry path.
@@ -153,8 +125,9 @@ export class RoundedRectangle extends Shape {
         const cx = this.x + w;
         /** Centre Y of the bounding rectangle. */
         const cy = this.y + h;
-        /** Corner arc radius (shorthand). */
-        const r = this.cornerRadius;
+        /** Corner arc radius, clamped so opposing arcs can never overlap
+         *  (was enforced in the old constructor; the geometry owns it now). */
+        const r = Math.min(this.cornerRadius, w, h);
 
         if (r <= 0) {
             return GeoPath.rect(this.x, this.y, this.width, this.height);
@@ -201,45 +174,5 @@ export class RoundedRectangle extends Shape {
         }
 
         return GeoPath.fromPoints(points, true);
-    }
-
-    /**
-     * Deep-copy this RoundedRectangle, including all active bindings.
-     * @returns {RoundedRectangle} A new RoundedRectangle value-equal to this one.
-     */
-    clone() {
-        const rr = new RoundedRectangle(this.id, { ...this.position }, this.x, this.y, this.width, this.height, this.cornerRadius);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                rr.setBinding(property, this.bindings[property]);
-            }
-        });
-        return rr;
-    }
-
-    /**
-     * Reconstruct a RoundedRectangle from serialized JSON.  Bindings are restored
-     * afterward by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json               - Serialized shape object.
-     * @param {string} json.id            - Shape identifier.
-     * @param {Object} [json.position]    - Legacy position.
-     * @param {number} [json.x]           - Serialized top-left X.
-     * @param {number} [json.y]           - Serialized top-left Y.
-     * @param {number} [json.width]       - Serialized width.
-     * @param {number} [json.height]      - Serialized height.
-     * @param {number} [json.cornerRadius]- Serialized corner radius.
-     * @returns {RoundedRectangle} A new RoundedRectangle with geometry restored.
-     */
-    static fromJSON(json) {
-        return new RoundedRectangle(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.x || 0,
-            json.y || 0,
-            json.width || 100,
-            json.height || 100,
-            json.cornerRadius || 10
-        );
     }
 }

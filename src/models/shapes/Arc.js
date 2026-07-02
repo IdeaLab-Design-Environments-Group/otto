@@ -50,38 +50,15 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Arc extends Shape {
-    /**
-     * @param {string}         id           - Unique shape identifier (e.g. "Arc 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]      - X coordinate of the arc's centre circle.
-     * @param {number}         [centerY=0]      - Y coordinate of the arc's centre circle.
-     * @param {number}         [radius=25]      - Radius of the arc in canvas-space units.
-     * @param {number}         [startAngle=0]   - Start angle in degrees (0 = 3 o'clock).
-     * @param {number}         [endAngle=90]    - End angle in degrees.  Arc is drawn
-     *        clockwise from startAngle to endAngle.
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, radius = 25, startAngle = 0, endAngle = 90) {
-        super(id, 'arc', position);
-        /** @type {number} X coordinate of the arc centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the arc centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Radius of the underlying circle. Bindable. */
-        this.radius = radius;
-        /** @type {number} Start angle in degrees. Bindable. */
-        this.startAngle = startAngle;
-        /** @type {number} End angle in degrees.  Clockwise from startAngle. Bindable. */
-        this.endAngle = endAngle;
-    }
+    static type = 'arc';
 
-    /**
-     * Declares which Arc properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'radius', 'startAngle', 'endAngle']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'radius', 'startAngle', 'endAngle'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        radius: { type: 'number', default: 25, bindable: true, min: 0, label: 'Radius' },
+        startAngle: { type: 'number', default: 0, bindable: true, label: 'Start Angle', unit: 'deg', aliases: ['start_angle'] },
+        endAngle: { type: 'number', default: 90, bindable: true, label: 'End Angle', unit: 'deg', aliases: ['end_angle'] }
+    };
 
     /**
      * Compute the AABB by delegating to the sampled geometry path.
@@ -162,45 +139,5 @@ export class Arc extends Shape {
         }
 
         return GeoPath.fromPoints(points, false);
-    }
-
-    /**
-     * Deep-copy this Arc, including all active bindings.
-     * @returns {Arc} A new Arc value-equal to this one.
-     */
-    clone() {
-        const arc = new Arc(this.id, { ...this.position }, this.centerX, this.centerY, this.radius, this.startAngle, this.endAngle);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                arc.setBinding(property, this.bindings[property]);
-            }
-        });
-        return arc;
-    }
-
-    /**
-     * Reconstruct an Arc from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json              - Serialized shape object.
-     * @param {string} json.id           - Shape identifier.
-     * @param {Object} [json.position]   - Legacy position.
-     * @param {number} [json.centerX]    - Serialized centre X.
-     * @param {number} [json.centerY]    - Serialized centre Y.
-     * @param {number} [json.radius]     - Serialized radius.
-     * @param {number} [json.startAngle] - Serialized start angle (degrees).
-     * @param {number} [json.endAngle]   - Serialized end angle (degrees).
-     * @returns {Arc} A new Arc with geometry restored.
-     */
-    static fromJSON(json) {
-        return new Arc(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.radius || 50,
-            json.startAngle || 0,
-            json.endAngle || 90
-        );
     }
 }

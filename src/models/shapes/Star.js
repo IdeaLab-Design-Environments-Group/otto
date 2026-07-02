@@ -3,9 +3,9 @@
  * radius as the vertices are walked around the centre.
  *
  * A star with P points has 2*P vertices in total: one outer tip and one inner valley per
- * point.  The point count is clamped to a minimum of 3 (a 2-pointed star degenerates into
- * a line).  Like Polygon, the first vertex starts at angle -PI/2 so that the top tip
- * points straight up.
+ * point.  The point count is clamped to a minimum of 3 inside toGeometryPath() (a
+ * 2-pointed star degenerates into a line).  Like Polygon, the first vertex starts at
+ * angle -PI/2 so that the top tip points straight up.
  *
  * The visual appearance of a star is controlled by the ratio outerRadius / innerRadius.
  * A ratio close to 1 produces a nearly-circular shape; a very small innerRadius relative
@@ -41,40 +41,15 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Star extends Shape {
-    /**
-     * @param {string}         id            - Unique shape identifier (e.g. "Star 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]       - X coordinate of the star centre.
-     * @param {number}         [centerY=0]       - Y coordinate of the star centre.
-     * @param {number}         [outerRadius=20]  - Distance from centre to each outer tip.
-     * @param {number}         [innerRadius=10]  - Distance from centre to each inner valley.
-     * @param {number}         [points=5]        - Number of star points.  Clamped to >= 3.
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, outerRadius = 20, innerRadius = 10, points = 5) {
-        super(id, 'star', position);
-        /** @type {number} X coordinate of the star centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the star centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Outer radius (tip distance from centre). Bindable. */
-        this.outerRadius = outerRadius;
-        /** @type {number} Inner radius (valley distance from centre). Bindable. */
-        this.innerRadius = innerRadius;
-        /**
-         * @type {number} Number of points (tips) on the star. Bindable.
-         * Clamped to >= 3.  A star with fewer than 3 points is degenerate.
-         */
-        this.points = Math.max(3, Math.floor(points)); // Minimum 3 points
-    }
+    static type = 'star';
 
-    /**
-     * Declares which Star properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'outerRadius', 'innerRadius', 'points']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'outerRadius', 'innerRadius', 'points'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        outerRadius: { type: 'number', default: 20, bindable: true, min: 0, label: 'Outer Radius', aliases: ['outer_radius'] },
+        innerRadius: { type: 'number', default: 10, bindable: true, min: 0, label: 'Inner Radius', aliases: ['inner_radius'] },
+        points: { type: 'number', default: 5, bindable: true, min: 3, step: 1, label: 'Points' }
+    };
 
     /**
      * Compute the AABB by delegating to the geometry path.
@@ -153,63 +128,5 @@ export class Star extends Shape {
         }
 
         return GeoPath.fromPoints(points, true); // Closed star
-    }
-
-    /**
-     * Deep-copy this Star, including all active bindings.
-     * @returns {Star} A new Star value-equal to this one.
-     */
-    clone() {
-        const star = new Star(
-            this.id,
-            { ...this.position },
-            this.centerX,
-            this.centerY,
-            this.outerRadius,
-            this.innerRadius,
-            this.points
-        );
-        // Copy bindings
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                star.setBinding(property, this.bindings[property]);
-            }
-        });
-        return star;
-    }
-
-    /**
-     * Reconstruct a Star from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json              - Serialized shape object.
-     * @param {string} json.id           - Shape identifier.
-     * @param {Object} [json.position]   - Legacy position.
-     * @param {number} [json.centerX]    - Serialized centre X.
-     * @param {number} [json.centerY]    - Serialized centre Y.
-     * @param {number} [json.outerRadius]- Serialized outer radius.
-     * @param {number} [json.innerRadius]- Serialized inner radius.
-     * @param {number} [json.points]     - Serialized point count.
-     * @returns {Star} A new Star with geometry restored.
-     */
-    static fromJSON(json) {
-        const star = new Star(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.outerRadius || 50,
-            json.innerRadius || 25,
-            json.points || 5
-        );
-
-        // Restore bindings
-        if (json.bindings) {
-            Object.keys(json.bindings).forEach(property => {
-                // Binding will be restored by ShapeRegistry
-            });
-        }
-
-        return star;
     }
 }

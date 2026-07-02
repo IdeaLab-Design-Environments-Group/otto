@@ -4,5 +4,7 @@
  * to this file. Add new test modules here.
  */
 export const TEST_MODULES = [
-    './unit/serializer-roundtrip.test.js'
+    './unit/serializer-roundtrip.test.js',
+    './unit/shape-schema.test.js',
+    './unit/canvas-stack.test.js'
 ];

@@ -32,6 +32,7 @@
  * @module core/TabManager
  */
 import EventBus, { EVENTS } from '../events/EventBus.js';
+import { HistoryManager } from '../commands/HistoryManager.js';
 import { SceneState } from './SceneState.js';
 
 /**
@@ -52,6 +53,12 @@ import { SceneState } from './SceneState.js';
  */
 export class Tab {
     constructor(id, name, sceneState) {
+        /**
+         * Per-tab undo/redo stack. Living on the Tab (not the Application)
+         * means history survives tab switches.
+         * @type {HistoryManager}
+         */
+        this.history = new HistoryManager(sceneState);
         this.id = id;
         this.name = name;
         this.sceneState = sceneState;

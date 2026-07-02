@@ -14,19 +14,16 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * Bindable properties: x, y, length, headWidth, headLength
  */
 export class Arrow extends Shape {
-    constructor(id, position = { x: 0, y: 0 }, x = 0, y = 0, length = 50, headWidth = 15, headLength = 12.5) {
-        super(id, 'arrow', position);
-        this.x = x;
-        this.y = y;
-        this.length = length;
-        this.headWidth = headWidth;
-        this.headLength = headLength;
-    }
-    
-    getBindableProperties() {
-        return ['x', 'y', 'length', 'headWidth', 'headLength'];
-    }
-    
+    static type = 'arrow';
+
+    static SCHEMA = {
+        x: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'X' },
+        y: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Y' },
+        length: { type: 'number', default: 50, bindable: true, min: 0, label: 'Length' },
+        headWidth: { type: 'number', default: 15, bindable: true, min: 0, label: 'Head Width', aliases: ['head_width'] },
+        headLength: { type: 'number', default: 12.5, bindable: true, min: 0, label: 'Head Length', aliases: ['head_length'] }
+    };
+
     getBounds() {
         const path = this.toGeometryPath();
         const box = path.tightBoundingBox() || path.looseBoundingBox();
@@ -79,27 +76,5 @@ export class Arrow extends Shape {
             { x: shaftEndX, y: sy + shaftWidth / 2 },
             { x: sx, y: sy + shaftWidth / 2 }
         ];
-    }
-    
-    clone() {
-        const a = new Arrow(this.id, { ...this.position }, this.x, this.y, this.length, this.headWidth, this.headLength);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                a.setBinding(property, this.bindings[property]);
-            }
-        });
-        return a;
-    }
-    
-    static fromJSON(json) {
-        return new Arrow(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.x || 0,
-            json.y || 0,
-            json.length || 100,
-            json.headWidth || 30,
-            json.headLength || 25
-        );
     }
 }

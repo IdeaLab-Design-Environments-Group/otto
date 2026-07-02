@@ -15,19 +15,16 @@ const HIT_TEST_STROKE = new GeoStroke(new GeoColor(0, 0, 0, 1), false, 6, 'cente
  * Bindable properties: centerX, centerY, width, amplitude, frequency
  */
 export class Wave extends Shape {
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, width = 50, amplitude = 10, frequency = 2) {
-        super(id, 'wave', position);
-        this.centerX = centerX;
-        this.centerY = centerY;
-        this.width = width;
-        this.amplitude = amplitude;
-        this.frequency = frequency;
-    }
-    
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'width', 'amplitude', 'frequency'];
-    }
-    
+    static type = 'wave';
+
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        width: { type: 'number', default: 50, bindable: true, min: 0, label: 'Width' },
+        amplitude: { type: 'number', default: 10, bindable: true, min: 0, label: 'Amplitude' },
+        frequency: { type: 'number', default: 2, bindable: true, min: 0.25, step: 0.25, label: 'Frequency' }
+    };
+
     getBounds() {
         const path = this.toGeometryPath();
         const box = path.tightBoundingBox() || path.looseBoundingBox();
@@ -73,27 +70,5 @@ export class Wave extends Shape {
         }
 
         return points;
-    }
-    
-    clone() {
-        const w = new Wave(this.id, { ...this.position }, this.centerX, this.centerY, this.width, this.amplitude, this.frequency);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                w.setBinding(property, this.bindings[property]);
-            }
-        });
-        return w;
-    }
-    
-    static fromJSON(json) {
-        return new Wave(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.width || 100,
-            json.amplitude || 20,
-            json.frequency || 2
-        );
     }
 }

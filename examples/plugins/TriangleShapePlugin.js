@@ -1,12 +1,16 @@
 /**
  * TriangleShapePlugin - Example Plugin
  *
- * Demonstrates how to add a new shape type to Otto-v2.
+ * Demonstrates how to add a new shape type to Otto-v2 using the
+ * schema-driven Shape base class.
  *
- * Features:
- * - Adds 'triangle' shape type
- * - Full support for bindings
- * - Proper serialization/deserialization
+ * A shape class declares `static type` and `static SCHEMA`; the base class
+ * derives the constructor, bindable-property list, clone(), translate(),
+ * toJSON() and fromJSON() from the schema — the plugin only implements
+ * geometry (getBounds / containsPoint / render).
+ *
+ * Note: `rotation` comes for free from the common schema shared by all
+ * shapes, so this class does not declare it.
  */
 import { Plugin } from '../../src/plugins/Plugin.js';
 import { Shape } from '../../src/models/shapes/Shape.js';
@@ -16,25 +20,13 @@ import { Shape } from '../../src/models/shapes/Shape.js';
  * An equilateral triangle defined by center position and size
  */
 export class Triangle extends Shape {
-    /**
-     * @param {string} id
-     * @param {Object} position
-     * @param {number} centerX - Center X coordinate
-     * @param {number} centerY - Center Y coordinate
-     * @param {number} size - Size (height of the triangle)
-     * @param {number} rotation - Rotation angle in degrees
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, size = 50, rotation = 0) {
-        super(id, 'triangle', position);
-        this.centerX = centerX;
-        this.centerY = centerY;
-        this.size = size;
-        this.rotation = rotation;
-    }
+    static type = 'triangle';
 
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'size', 'rotation'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        size: { type: 'number', default: 50, bindable: true, min: 0, label: 'Size' }
+    };
 
     getBounds() {
         // Calculate bounding box for equilateral triangle
@@ -106,46 +98,6 @@ export class Triangle extends Shape {
         ctx.closePath();
         ctx.stroke();
     }
-
-    clone() {
-        const triangle = new Triangle(
-            this.id,
-            { ...this.position },
-            this.centerX,
-            this.centerY,
-            this.size,
-            this.rotation
-        );
-
-        // Copy bindings
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                triangle.setBinding(property, this.bindings[property]);
-            }
-        });
-
-        return triangle;
-    }
-
-    toJSON() {
-        const json = super.toJSON();
-        json.centerX = this.centerX;
-        json.centerY = this.centerY;
-        json.size = this.size;
-        json.rotation = this.rotation;
-        return json;
-    }
-
-    static fromJSON(json) {
-        return new Triangle(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.size || 50,
-            json.rotation || 0
-        );
-    }
 }
 
 /**
@@ -163,18 +115,12 @@ export class TriangleShapePlugin extends Plugin {
     }
 
     async onActivate(api) {
-        // Register the triangle shape type
+        // Register the triangle shape type. The schema-driven class provides
+        // the factory and fromJSON; wrapping keeps `this` bound to the class.
         this.registerShape(
-            'triangle',
-            (id, position, options) => new Triangle(
-                id,
-                position,
-                options.centerX || position.x || 0,
-                options.centerY || position.y || 0,
-                options.size || 50,
-                options.rotation || 0
-            ),
-            Triangle.fromJSON
+            Triangle.type,
+            (id, position, options) => new Triangle(id, { ...options, position }),
+            (json) => Triangle.fromJSON(json)
         );
 
         console.log('Triangle shape registered successfully');

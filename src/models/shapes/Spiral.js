@@ -15,19 +15,16 @@ const HIT_TEST_STROKE = new GeoStroke(new GeoColor(0, 0, 0, 1), false, 6, 'cente
  * Bindable properties: centerX, centerY, startRadius, endRadius, turns
  */
 export class Spiral extends Shape {
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, startRadius = 5, endRadius = 25, turns = 3) {
-        super(id, 'spiral', position);
-        this.centerX = centerX;
-        this.centerY = centerY;
-        this.startRadius = startRadius;
-        this.endRadius = endRadius;
-        this.turns = turns;
-    }
-    
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'startRadius', 'endRadius', 'turns'];
-    }
-    
+    static type = 'spiral';
+
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        startRadius: { type: 'number', default: 5, bindable: true, min: 0, label: 'Start Radius', aliases: ['start_radius'] },
+        endRadius: { type: 'number', default: 25, bindable: true, min: 0, label: 'End Radius', aliases: ['end_radius'] },
+        turns: { type: 'number', default: 3, bindable: true, min: 0.25, step: 0.25, label: 'Turns' }
+    };
+
     getBounds() {
         const path = this.toGeometryPath();
         const box = path.tightBoundingBox() || path.looseBoundingBox();
@@ -76,27 +73,5 @@ export class Spiral extends Shape {
         }
 
         return points;
-    }
-    
-    clone() {
-        const s = new Spiral(this.id, { ...this.position }, this.centerX, this.centerY, this.startRadius, this.endRadius, this.turns);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                s.setBinding(property, this.bindings[property]);
-            }
-        });
-        return s;
-    }
-    
-    static fromJSON(json) {
-        return new Spiral(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.startRadius || 10,
-            json.endRadius || 50,
-            json.turns || 3
-        );
     }
 }

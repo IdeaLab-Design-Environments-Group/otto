@@ -5,7 +5,14 @@
 import { TabManager } from './TabManager.js';
 import { ShapeRegistry } from '../models/shapes/ShapeRegistry.js';
 import { ShapeLibrary } from '../ui/ShapeLibrary.js';
-import { CanvasRenderer } from '../ui/CanvasRenderer.js';
+import { SceneContext } from './SceneContext.js';
+import { ViewportController } from '../controllers/ViewportController.js';
+import { InteractionState } from '../controllers/InteractionState.js';
+import { HitTestService } from '../services/HitTestService.js';
+import { RemoveShapesCommand } from '../commands/shapeCommands.js';
+import { CanvasView } from '../views/canvas/CanvasView.js';
+import { CanvasInputController } from '../controllers/CanvasInputController.js';
+import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
 import { ParametersMenu } from '../ui/ParametersMenu.js';
 import { PropertiesPanel } from '../ui/PropertiesPanel.js';
 import { TabBar } from '../ui/TabBar.js';
@@ -20,7 +27,6 @@ import { Serializer } from '../persistence/Serializer.js';
 import { StorageManager } from '../persistence/StorageManager.js';
 import { FileManager } from '../persistence/FileManager.js';
 import * as Geometry from '../geometry/index.js';
-import { SceneHistory, SceneMemento } from './SceneState.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 
 export class Application {
@@ -33,8 +39,16 @@ export class Application {
         this.storageManager = new StorageManager(this.tabManager, Serializer);
         this.fileManager = new FileManager(this.tabManager, Serializer);
         
+        // MVC canvas stack (initialized in init)
+        this.context = null;            // SceneContext: lazy resolver of the active scene
+        this.viewportController = null; // pan/zoom + coordinate transforms
+        this.interaction = null;        // ephemeral interaction view-model
+        this.hitTestService = null;     // pure hit-test queries
+        this.canvasView = null;         // canvas owner + render passes
+        this.canvasInput = null;        // mouse/wheel controller
+        this.keyboardShortcuts = null;  // canvas keyboard controller
+
         // UI Components (will be initialized in init)
-        this.canvasRenderer = null;
         this.shapeLibrary = null;
         this.parametersMenu = null;
         this.propertiesPanel = null;
@@ -46,9 +60,9 @@ export class Application {
         this.codeRunner = null;
         this.editorSyncConnector = null;
         
-        // Undo/Redo history
-        this.sceneHistory = null;
-        
+        // Undo/redo is per-tab: each Tab owns a HistoryManager, reached
+        // through this.context (SceneContext). No app-level history here.
+
         // Current scene state reference
         this.currentSceneState = null;
     }
@@ -78,12 +92,6 @@ export class Application {
             throw new Error('No active scene available');
         }
         
-        // Initialize undo/redo history for active scene
-        this.sceneHistory = new SceneHistory(50);
-        
-        // Create initial snapshot
-        this.createHistorySnapshot();
-        
         // Initialize UI components
         this.tabBar = new TabBar(tabBarContainer, this.tabManager);
         this.tabBar.mount();
@@ -91,18 +99,43 @@ export class Application {
         this.shapeLibrary = new ShapeLibrary(shapeLibraryContainer, ShapeRegistry);
         this.shapeLibrary.mount();
         
-        this.canvasRenderer = new CanvasRenderer(
-            canvasElement, 
-            this.currentSceneState, 
-            this.currentSceneState.bindingResolver
-        );
+        // MVC canvas stack: context resolves the active scene lazily (the
+        // TabManager instance is swapped on load/import, hence the closure),
+        // the controllers own interaction, the view owns pixels.
+        this.context = new SceneContext(() => this.tabManager);
+        this.viewportController = new ViewportController(this.context);
+        this.interaction = new InteractionState();
+        this.hitTestService = new HitTestService({
+            context: this.context,
+            viewportController: this.viewportController,
+            interaction: this.interaction
+        });
+        this.canvasView = new CanvasView(canvasElement, {
+            context: this.context,
+            viewportController: this.viewportController,
+            interaction: this.interaction
+        });
+        this.canvasInput = new CanvasInputController({
+            view: this.canvasView,
+            context: this.context,
+            viewportController: this.viewportController,
+            interaction: this.interaction,
+            hitTest: this.hitTestService
+        });
+        this.keyboardShortcuts = new KeyboardShortcutController({
+            view: this.canvasView,
+            context: this.context,
+            interaction: this.interaction,
+            input: this.canvasInput
+        });
 
         this.blocksEditor = new BlocksEditor(
             blocklyContainer,
             ShapeRegistry,
             this.currentSceneState.shapeStore,
             this.currentSceneState.parameterStore,
-            this.canvasRenderer
+            this.viewportController,
+            this.context
         );
         this.blocksEditor.mount();
 
@@ -112,7 +145,7 @@ export class Application {
                 codeEditorContainer,
                 this.currentSceneState.shapeStore,
                 this.currentSceneState.parameterStore,
-                this.canvasRenderer
+                this.context
             );
             this.codeEditor.mount();
         }
@@ -131,49 +164,48 @@ export class Application {
             parameterStore: this.currentSceneState.parameterStore
         });
         
-        // Initialize Zoom Controls
-        this.zoomControls = new ZoomControls(zoomControlsContainer, this.currentSceneState.viewport);
-        this.zoomControls.setSceneState(this.currentSceneState);
-        this.zoomControls.setCanvas(canvasElement);
-        this.zoomControls.getBaseZoom = () => this.canvasRenderer.baseZoom || 1;
-        this.zoomControls.onZoomChange = (factor, centerX, centerY) => {
-            this.canvasRenderer.zoom(factor, centerX, centerY);
-        };
+        // Initialize Zoom Controls (delegates all zoom math to the
+        // ViewportController; no injected callbacks)
+        this.zoomControls = new ZoomControls(zoomControlsContainer, {
+            context: this.context,
+            viewportController: this.viewportController
+        });
         this.zoomControls.mount();
         
         this.parametersMenu = new ParametersMenu(
-            parametersMenuContainer, 
-            this.currentSceneState.parameterStore
+            parametersMenuContainer,
+            this.currentSceneState.parameterStore,
+            this.context
         );
         this.parametersMenu.mount();
-        
+
         this.propertiesPanel = new PropertiesPanel(
-            propertiesPanelContainer, 
-            this.currentSceneState.shapeStore, 
-            this.currentSceneState.parameterStore
+            propertiesPanelContainer,
+            this.currentSceneState.shapeStore,
+            this.currentSceneState.parameterStore,
+            this.context
         );
         this.propertiesPanel.mount();
         
-        // Initialize DragDropManager
+        // Initialize DragDropManager (context-based: always drops into the
+        // active tab's store)
         this.dragDropManager = new DragDropManager(
             canvasElement,
-            this.currentSceneState.shapeStore,
+            this.context,
             ShapeRegistry
         );
-
-        // Connect DragDropManager with CanvasRenderer
         this.dragDropManager.setScreenToWorldConverter((x, y) => {
-            return this.canvasRenderer.screenToWorld(x, y);
+            return this.viewportController.screenToWorld(x, y);
         });
 
         // Initialize Panel Resizer
         this.panelResizer = new PanelResizer();
         // Connect panel resizer to canvas renderer
         this.panelResizer.setOnResizeCallback(() => {
-            if (this.canvasRenderer) {
+            if (this.canvasView) {
                 // Use requestAnimationFrame to ensure resize happens after layout
                 requestAnimationFrame(() => {
-                    this.canvasRenderer.resizeCanvas();
+                    this.canvasView.resizeCanvas();
                 });
             }
         });
@@ -201,39 +233,18 @@ export class Application {
      * Setup event listeners
      */
     setupEventListeners() {
-        // Listen for tab switches to update components
+        // Tab switches just re-point cached-store components; the canvas
+        // stack follows via SceneContext. Undo history lives on each Tab.
         EventBus.subscribe(EVENTS.TAB_SWITCHED, ({ tab }) => {
             if (tab) {
                 this.currentSceneState = tab.sceneState;
                 this.updateComponentsForNewScene(this.currentSceneState);
-                
-                // Reset history for new scene
-                this.sceneHistory = new SceneHistory(50);
+                this.updateUndoRedoUI();
             }
         });
-        
-        // Listen for shape/parameter changes to create history snapshots
-        EventBus.subscribe(EVENTS.SHAPE_ADDED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
-        EventBus.subscribe(EVENTS.SHAPE_REMOVED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
-        EventBus.subscribe(EVENTS.SHAPE_MOVED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
-        EventBus.subscribe(EVENTS.PARAM_ADDED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
-        EventBus.subscribe(EVENTS.PARAM_REMOVED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
-        EventBus.subscribe(EVENTS.PARAM_CHANGED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
-        EventBus.subscribe(EVENTS.EDGE_JOINERY_CHANGED, () => {
-            setTimeout(() => this.createHistorySnapshot(), 100);
-        });
+
+        // Undo/redo button state follows the active tab's HistoryManager.
+        EventBus.subscribe(EVENTS.HISTORY_CHANGED, () => this.updateUndoRedoUI());
     }
     
     /**
@@ -304,51 +315,35 @@ export class Application {
      * @param {SceneState} sceneState 
      */
     updateComponentsForNewScene(sceneState) {
-        // Update canvas renderer
-        this.canvasRenderer.sceneState = sceneState;
-        this.canvasRenderer.viewport = sceneState.viewport;
-        this.canvasRenderer.bindingResolver = sceneState.bindingResolver;
-        this.canvasRenderer.render();
-        
-        // Update zoom controls
-        if (this.zoomControls) {
-            this.zoomControls.viewport = sceneState.viewport;
-            this.zoomControls.setSceneState(sceneState);
-            this.zoomControls.render();
-        }
-        
-        // Reset history for new scene
-        this.sceneHistory = new SceneHistory(50);
-        // Create initial snapshot for new scene
-        setTimeout(() => this.createHistorySnapshot(), 100);
-        
+        // The canvas stack (CanvasView, controllers, ZoomControls,
+        // DragDropManager) resolves the active scene through SceneContext and
+        // needs no re-wiring here; CanvasView also resets interaction state
+        // on TAB_SWITCHED / SCENE_LOADED. The components below still cache
+        // store references and are updated explicitly (they migrate to
+        // SceneContext with the command-system refactor).
+
         // Update parameters menu
         this.parametersMenu.parameterStore = sceneState.parameterStore;
         this.parametersMenu.render();
-        
+
         // Update properties panel
         this.propertiesPanel.shapeStore = sceneState.shapeStore;
         this.propertiesPanel.parameterStore = sceneState.parameterStore;
         this.propertiesPanel.bindingResolver = sceneState.bindingResolver;
         this.propertiesPanel.selectedShape = null;
         this.propertiesPanel.render();
-        
-        // Update drag drop manager
-        this.dragDropManager.shapeStore = sceneState.shapeStore;
 
         // Update blocks editor
         if (this.blocksEditor) {
             this.blocksEditor.setShapeStore(sceneState.shapeStore);
             this.blocksEditor.setParameterStore(sceneState.parameterStore);
-            this.blocksEditor.setCanvasRenderer(this.canvasRenderer);
         }
 
         // Update code editor stores + sync
         if (this.codeEditor) {
             this.codeEditor.setStores(
                 sceneState.shapeStore,
-                sceneState.parameterStore,
-                this.canvasRenderer
+                sceneState.parameterStore
             );
         }
     }
@@ -389,27 +384,6 @@ export class Application {
     }
     
     /**
-     * Create a history snapshot
-     * Uses debouncing to avoid creating too many snapshots
-     */
-    createHistorySnapshot() {
-        if (!this._historyTimeout && this.currentSceneState && this.sceneHistory) {
-            this._historyTimeout = setTimeout(() => {
-                if (this.currentSceneState && this.sceneHistory) {
-                    try {
-                        const memento = this.currentSceneState.createMemento();
-                        this.sceneHistory.push(memento);
-                        this.updateUndoRedoUI();
-                    } catch (error) {
-                        console.error('Error creating history snapshot:', error);
-                    }
-                }
-                this._historyTimeout = null;
-            }, 300); // Debounce for 300ms
-        }
-    }
-    
-    /**
      * Load initial state from autosave
      */
     async loadInitialState() {
@@ -432,7 +406,7 @@ export class Application {
                 if (this.currentSceneState) {
                     this.updateComponentsForNewScene(this.currentSceneState);
                 }
-                
+
                 console.log('Loaded autosave');
             }
         } catch (error) {
@@ -476,7 +450,6 @@ export class Application {
             this.currentSceneState = this.tabManager.getActiveScene();
             if (this.currentSceneState) {
                 this.updateComponentsForNewScene(this.currentSceneState);
-                this.sceneHistory = new SceneHistory(50);
             }
             console.log('Loaded successfully');
             this.showNotification('Loaded successfully!', 'success');
@@ -514,7 +487,6 @@ export class Application {
             this.currentSceneState = this.tabManager.getActiveScene();
             if (this.currentSceneState) {
                 this.updateComponentsForNewScene(this.currentSceneState);
-                this.sceneHistory = new SceneHistory(50);
             }
             console.log('Imported successfully');
             this.showNotification('File imported successfully!', 'success');
@@ -552,141 +524,70 @@ export class Application {
     }
     
     /**
-     * Undo last action
+     * Undo the last command on the active tab's history. Commands revert
+     * through the stores, which emit events that repaint the canvas and
+     * refresh the panels — no manual component pokes needed.
      */
     async undo() {
-        if (!this.sceneHistory || !this.currentSceneState) {
-            console.log('Cannot undo: no history or scene state');
-            return;
-        }
-        
-        if (this.sceneHistory.canUndo()) {
-            try {
-                // Clear any pending history snapshot to avoid conflicts
-                if (this._historyTimeout) {
-                    clearTimeout(this._historyTimeout);
-                    this._historyTimeout = null;
-                }
-                
-                const memento = this.sceneHistory.undo();
-                if (memento) {
-                    await this.currentSceneState.restoreMemento(memento);
-                    
-                    // Update all UI components
-                    if (this.canvasRenderer) {
-                        this.canvasRenderer.render();
-                    }
-                    if (this.parametersMenu) {
-                        this.parametersMenu.render();
-                    }
-                    if (this.propertiesPanel) {
-                        this.propertiesPanel.render();
-                    }
-                    if (this.zoomControls) {
-                        this.zoomControls.updateZoomDisplay();
-                    }
-
-                    this.updateUndoRedoUI();
-                    console.log('Undo successful');
-                }
-            } catch (error) {
-                console.error('Error during undo:', error);
-            }
-        } else {
-            console.log('Cannot undo: no undo history available');
+        const history = this.context?.history;
+        if (!history) return;
+        try {
+            await history.undo();
+        } catch (error) {
+            console.error('Error during undo:', error);
         }
     }
-    
+
     /**
-     * Redo last undone action
+     * Redo the next command on the active tab's history.
      */
     async redo() {
-        if (!this.sceneHistory || !this.currentSceneState) {
-            console.log('Cannot redo: no history or scene state');
-            return;
-        }
-        
-        if (this.sceneHistory.canRedo()) {
-            try {
-                // Clear any pending history snapshot to avoid conflicts
-                if (this._historyTimeout) {
-                    clearTimeout(this._historyTimeout);
-                    this._historyTimeout = null;
-                }
-                
-                const memento = this.sceneHistory.redo();
-                if (memento) {
-                    await this.currentSceneState.restoreMemento(memento);
-                    
-                    // Update all UI components
-                    if (this.canvasRenderer) {
-                        this.canvasRenderer.render();
-                    }
-                    if (this.parametersMenu) {
-                        this.parametersMenu.render();
-                    }
-                    if (this.propertiesPanel) {
-                        this.propertiesPanel.render();
-                    }
-                    if (this.zoomControls) {
-                        this.zoomControls.updateZoomDisplay();
-                    }
-
-                    this.updateUndoRedoUI();
-                    console.log('Redo successful');
-                }
-            } catch (error) {
-                console.error('Error during redo:', error);
-            }
-        } else {
-            console.log('Cannot redo: no redo history available');
+        const history = this.context?.history;
+        if (!history) return;
+        try {
+            await history.redo();
+        } catch (error) {
+            console.error('Error during redo:', error);
         }
     }
-    
+
     /**
-     * Delete selected shape(s) - supports multi-selection
+     * Delete the current selection via an undoable RemoveShapesCommand.
      */
     deleteSelectedShape() {
-        if (!this.currentSceneState) return;
-        
-        const selectedIds = Array.from(this.currentSceneState.shapeStore.getSelectedIds());
-        const singleSelected = this.currentSceneState.shapeStore.getSelected();
-        
-        // Get all selected shapes
-        const idsToDelete = selectedIds.length > 0 ? selectedIds : (singleSelected ? [singleSelected.id] : []);
-        
+        const scene = this.context?.scene;
+        if (!scene) return;
+
+        const selectedIds = Array.from(scene.shapeStore.getSelectedIds());
+        const singleSelected = scene.shapeStore.getSelected();
+        const idsToDelete = selectedIds.length > 0
+            ? selectedIds
+            : (singleSelected ? [singleSelected.id] : []);
+
         if (idsToDelete.length > 0) {
-            // Delete all selected shapes
-            idsToDelete.forEach(shapeId => {
-                this.currentSceneState.shapeStore.remove(shapeId);
-            });
-            
-            // Clear selection after deletion
-            this.currentSceneState.shapeStore.clearSelection();
-            
-            console.log(`Deleted ${idsToDelete.length} shape(s)`);
+            this.context.history.execute(new RemoveShapesCommand(idsToDelete));
         }
     }
-    
+
     /**
-     * Update undo/redo button UI states
+     * Reflect the active tab's undo/redo availability on the toolbar buttons.
+     * Driven by HISTORY_CHANGED (and tab switches) — no polling.
      */
     updateUndoRedoUI() {
         const btnUndo = document.getElementById('btn-undo');
         const btnRedo = document.getElementById('btn-redo');
-        
-        if (this.sceneHistory) {
-            if (btnUndo) {
-                btnUndo.disabled = !this.sceneHistory.canUndo();
-                btnUndo.style.opacity = this.sceneHistory.canUndo() ? '1' : '0.5';
-                btnUndo.style.cursor = this.sceneHistory.canUndo() ? 'pointer' : 'not-allowed';
-            }
-            
-            if (btnRedo) {
-                btnRedo.disabled = !this.sceneHistory.canRedo();
-                btnRedo.style.opacity = this.sceneHistory.canRedo() ? '1' : '0.5';
-                btnRedo.style.cursor = this.sceneHistory.canRedo() ? 'pointer' : 'not-allowed';
-            }
+        const history = this.context?.history;
+        if (!history) return;
+
+        if (btnUndo) {
+            btnUndo.disabled = !history.canUndo();
+            btnUndo.style.opacity = history.canUndo() ? '1' : '0.5';
+            btnUndo.style.cursor = history.canUndo() ? 'pointer' : 'not-allowed';
+        }
+        if (btnRedo) {
+            btnRedo.disabled = !history.canRedo();
+            btnRedo.style.opacity = history.canRedo() ? '1' : '0.5';
+            btnRedo.style.cursor = history.canRedo() ? 'pointer' : 'not-allowed';
         }
     }
 }

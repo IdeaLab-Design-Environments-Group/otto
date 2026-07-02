@@ -46,34 +46,14 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Ellipse extends Shape {
-    /**
-     * @param {string}         id       - Unique shape identifier (e.g. "Ellipse 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]   - X coordinate of the ellipse centre.
-     * @param {number}         [centerY=0]   - Y coordinate of the ellipse centre.
-     * @param {number}         [radiusX=30]  - Horizontal semi-axis (half-width).
-     * @param {number}         [radiusY=20]  - Vertical semi-axis (half-height).
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, radiusX = 30, radiusY = 20) {
-        super(id, 'ellipse', position);
-        /** @type {number} X coordinate of the ellipse centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the ellipse centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Horizontal semi-axis length. Bindable. */
-        this.radiusX = radiusX;
-        /** @type {number} Vertical semi-axis length. Bindable. */
-        this.radiusY = radiusY;
-    }
+    static type = 'ellipse';
 
-    /**
-     * Declares which Ellipse properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'radiusX', 'radiusY']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'radiusX', 'radiusY'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        radiusX: { type: 'number', default: 30, bindable: true, min: 0, label: 'Radius X' },
+        radiusY: { type: 'number', default: 20, bindable: true, min: 0, label: 'Radius Y' }
+    };
 
     /**
      * Compute the AABB by delegating to the geometry path.
@@ -150,43 +130,5 @@ export class Ellipse extends Shape {
             ));
         }
         return GeoPath.fromPoints(points, true);
-    }
-
-    /**
-     * Deep-copy this Ellipse, including all active bindings.
-     * @returns {Ellipse} A new Ellipse value-equal to this one.
-     */
-    clone() {
-        const el = new Ellipse(this.id, { ...this.position }, this.centerX, this.centerY, this.radiusX, this.radiusY);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                el.setBinding(property, this.bindings[property]);
-            }
-        });
-        return el;
-    }
-
-    /**
-     * Reconstruct an Ellipse from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json            - Serialized shape object.
-     * @param {string} json.id         - Shape identifier.
-     * @param {Object} [json.position] - Legacy position.
-     * @param {number} [json.centerX]  - Serialized centre X.
-     * @param {number} [json.centerY]  - Serialized centre Y.
-     * @param {number} [json.radiusX]  - Serialized horizontal semi-axis.
-     * @param {number} [json.radiusY]  - Serialized vertical semi-axis.
-     * @returns {Ellipse} A new Ellipse with geometry restored.
-     */
-    static fromJSON(json) {
-        return new Ellipse(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.radiusX || 60,
-            json.radiusY || 40
-        );
     }
 }

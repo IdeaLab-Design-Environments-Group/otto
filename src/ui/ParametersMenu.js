@@ -5,11 +5,48 @@
 import { Component } from './Component.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { ParameterBuilder } from '../models/Parameter.js';
+import { AddParameterCommand, RemoveParameterCommand, SetParameterValueCommand, UpdateParameterMetaCommand } from '../commands/parameterCommands.js';
 
 export class ParametersMenu extends Component {
-    constructor(container, parameterStore) {
+    /**
+     * @param {HTMLElement} container
+     * @param {import('../core/ParameterStore.js').ParameterStore} parameterStore
+     * @param {import('../core/SceneContext.js').SceneContext} [context] -
+     *   Provides the active tab's undo history; every parameter edit routes
+     *   through a command when present (falls back to direct store writes).
+     */
+    constructor(container, parameterStore, context = null) {
         super(container);
         this.parameterStore = parameterStore;
+        this.context = context;
+    }
+
+    /** @returns {?import('../commands/HistoryManager.js').HistoryManager} */
+    get history() {
+        return this.context ? this.context.history : null;
+    }
+
+    /**
+     * Run a parameter mutation through the undo history when available,
+     * otherwise apply it directly to the store (keeps the panel usable in
+     * isolation / tests).
+     * @param {import('../commands/Command.js').Command} command
+     * @param {() => void} fallback
+     */
+    dispatch(command, fallback) {
+        if (this.history) {
+            this.history.execute(command);
+        } else {
+            fallback();
+        }
+    }
+
+    // Also re-render on metadata edits (name/min/max/step).
+    subscribeToEvents() {
+        this.subscribe(EVENTS.PARAM_ADDED, () => this.render());
+        this.subscribe(EVENTS.PARAM_REMOVED, () => this.render());
+        this.subscribe(EVENTS.PARAM_CHANGED, () => this.render());
+        this.subscribe(EVENTS.PARAM_UPDATED, () => this.render());
     }
     
     /**
@@ -38,15 +75,6 @@ export class ParametersMenu extends Component {
         
         // Subscribe to parameter events
         this.subscribeToEvents();
-    }
-    
-    /**
-     * Subscribe to parameter events
-     */
-    subscribeToEvents() {
-        this.subscribe(EVENTS.PARAM_ADDED, () => this.render());
-        this.subscribe(EVENTS.PARAM_REMOVED, () => this.render());
-        this.subscribe(EVENTS.PARAM_CHANGED, () => this.render());
     }
     
     /**
@@ -101,8 +129,10 @@ export class ParametersMenu extends Component {
         });
         minInput.addEventListener('change', (e) => {
             const min = e.target.value === '' ? -Infinity : parseFloat(e.target.value);
-            const param = this.parameterStore.get(parameter.id);
-            param.min = min;
+            this.dispatch(
+                new UpdateParameterMetaCommand(parameter.id, { min }),
+                () => { const p = this.parameterStore.get(parameter.id); if (p) p.min = min; }
+            );
         });
 
         const maxInput = this.createElement('input', {
@@ -114,8 +144,10 @@ export class ParametersMenu extends Component {
         });
         maxInput.addEventListener('change', (e) => {
             const max = e.target.value === '' ? Infinity : parseFloat(e.target.value);
-            const param = this.parameterStore.get(parameter.id);
-            param.max = max;
+            this.dispatch(
+                new UpdateParameterMetaCommand(parameter.id, { max }),
+                () => { const p = this.parameterStore.get(parameter.id); if (p) p.max = max; }
+            );
         });
         
         const stepInput = this.createElement('input', {
@@ -127,9 +159,12 @@ export class ParametersMenu extends Component {
             step: 'any'
         });
         stepInput.addEventListener('change', (e) => {
-            const step = e.target.value === '' ? 0 : parseFloat(e.target.value);
-            const param = this.parameterStore.get(parameter.id);
-            param.step = step >= 0 ? step : 0; // 0 means no step constraint
+            const raw = e.target.value === '' ? 0 : parseFloat(e.target.value);
+            const step = raw >= 0 ? raw : 0; // 0 means no step constraint
+            this.dispatch(
+                new UpdateParameterMetaCommand(parameter.id, { step }),
+                () => { const p = this.parameterStore.get(parameter.id); if (p) p.step = step; }
+            );
         });
         
         rangeGroup.appendChild(minInput);
@@ -160,7 +195,7 @@ export class ParametersMenu extends Component {
             .withStep(0) // 0 means no step constraint (allows decimals)
             .build();
 
-        this.parameterStore.add(param);
+        this.dispatch(new AddParameterCommand(param), () => this.parameterStore.add(param));
     }
     
     /**
@@ -177,7 +212,7 @@ export class ParametersMenu extends Component {
      */
     deleteParameter(id) {
         if (confirm('Are you sure you want to delete this parameter?')) {
-            this.parameterStore.remove(id);
+            this.dispatch(new RemoveParameterCommand(id), () => this.parameterStore.remove(id));
         }
     }
     
@@ -188,7 +223,10 @@ export class ParametersMenu extends Component {
      */
     onValueChange(id, value) {
         if (!isNaN(value)) {
-            this.parameterStore.setValue(id, value);
+            this.dispatch(
+                new SetParameterValueCommand(id, value),
+                () => this.parameterStore.setValue(id, value)
+            );
         }
     }
     
@@ -200,9 +238,14 @@ export class ParametersMenu extends Component {
     onNameChange(id, name) {
         const param = this.parameterStore.get(id);
         if (param && name.trim()) {
-            param.name = name.trim();
-            // Emit event to notify of name change
-            EventBus.emit(EVENTS.PARAM_CHANGED, { id, parameter: param });
+            const newName = name.trim();
+            this.dispatch(
+                new UpdateParameterMetaCommand(id, { name: newName }),
+                () => {
+                    param.name = newName;
+                    EventBus.emit(EVENTS.PARAM_CHANGED, { id, parameter: param });
+                }
+            );
         }
     }
 }

@@ -40,34 +40,14 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  * @extends Shape
  */
 export class Triangle extends Shape {
-    /**
-     * @param {string}         id       - Unique shape identifier (e.g. "Triangle 1").
-     * @param {{x: number, y: number}} [position={x:0,y:0}] - Legacy position (not used
-     *        for geometry).
-     * @param {number}         [centerX=0]  - X coordinate of the triangle's geometric centre.
-     * @param {number}         [centerY=0]  - Y coordinate of the triangle's geometric centre.
-     * @param {number}         [base=30]    - Width of the flat (top) edge of the triangle.
-     * @param {number}         [height=40]  - Vertical distance from the base edge to the apex.
-     */
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, base = 30, height = 40) {
-        super(id, 'triangle', position);
-        /** @type {number} X coordinate of the triangle centre. Bindable. */
-        this.centerX = centerX;
-        /** @type {number} Y coordinate of the triangle centre. Bindable. */
-        this.centerY = centerY;
-        /** @type {number} Width of the base edge. Bindable. */
-        this.base = base;
-        /** @type {number} Height from base to apex. Bindable. */
-        this.height = height;
-    }
+    static type = 'triangle';
 
-    /**
-     * Declares which Triangle properties can be driven by parameter bindings.
-     * @returns {string[]} Always {@code ['centerX', 'centerY', 'base', 'height']}.
-     */
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'base', 'height'];
-    }
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        base: { type: 'number', default: 30, bindable: true, min: 0, label: 'Base' },
+        height: { type: 'number', default: 40, bindable: true, min: 0, label: 'Height' }
+    };
 
     /**
      * Compute the AABB by delegating to the geometry path.
@@ -136,43 +116,5 @@ export class Triangle extends Shape {
         ];
 
         return GeoPath.fromPoints(points, true);
-    }
-
-    /**
-     * Deep-copy this Triangle, including all active bindings.
-     * @returns {Triangle} A new Triangle value-equal to this one.
-     */
-    clone() {
-        const tri = new Triangle(this.id, { ...this.position }, this.centerX, this.centerY, this.base, this.height);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                tri.setBinding(property, this.bindings[property]);
-            }
-        });
-        return tri;
-    }
-
-    /**
-     * Reconstruct a Triangle from serialized JSON.  Bindings are restored afterward
-     * by {@link ShapeRegistry.fromJSON}.
-     *
-     * @param {Object} json            - Serialized shape object.
-     * @param {string} json.id         - Shape identifier.
-     * @param {Object} [json.position] - Legacy position.
-     * @param {number} [json.centerX]  - Serialized centre X.
-     * @param {number} [json.centerY]  - Serialized centre Y.
-     * @param {number} [json.base]     - Serialized base width.
-     * @param {number} [json.height]   - Serialized height.
-     * @returns {Triangle} A new Triangle with geometry restored.
-     */
-    static fromJSON(json) {
-        return new Triangle(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.base || 60,
-            json.height || 80
-        );
     }
 }

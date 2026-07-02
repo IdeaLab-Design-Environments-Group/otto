@@ -11,21 +11,18 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
 
 /**
  * Slot (stadium/obround) shape implementation
- * Bindable properties: centerX, centerY, length, width
+ * Bindable properties: centerX, centerY, length, slotWidth
  */
 export class Slot extends Shape {
-    constructor(id, position = { x: 0, y: 0 }, centerX = 0, centerY = 0, length = 50, width = 15) {
-        super(id, 'slot', position);
-        this.centerX = centerX;
-        this.centerY = centerY;
-        this.length = length;
-        this.slotWidth = width;
-    }
-    
-    getBindableProperties() {
-        return ['centerX', 'centerY', 'length', 'slotWidth'];
-    }
-    
+    static type = 'slot';
+
+    static SCHEMA = {
+        centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
+        centerY: { type: 'number', default: (o) => o.position?.y ?? 0, bindable: true, translate: 'y', label: 'Center Y' },
+        length: { type: 'number', default: 50, bindable: true, min: 0, label: 'Length' },
+        slotWidth: { type: 'number', default: 15, bindable: true, min: 0, label: 'Slot Width', aliases: ['width', 'slot_width'] }
+    };
+
     getBounds() {
         const path = this.toGeometryPath();
         const box = path.tightBoundingBox() || path.looseBoundingBox();
@@ -81,26 +78,5 @@ export class Slot extends Shape {
         }
 
         return points;
-    }
-    
-    clone() {
-        const s = new Slot(this.id, { ...this.position }, this.centerX, this.centerY, this.length, this.slotWidth);
-        this.getBindableProperties().forEach(property => {
-            if (this.bindings[property]) {
-                s.setBinding(property, this.bindings[property]);
-            }
-        });
-        return s;
-    }
-    
-    static fromJSON(json) {
-        return new Slot(
-            json.id,
-            json.position || { x: 0, y: 0 },
-            json.centerX || 0,
-            json.centerY || 0,
-            json.length || 100,
-            json.slotWidth || 30
-        );
     }
 }
