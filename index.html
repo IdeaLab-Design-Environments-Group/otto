@@ -15,55 +15,70 @@
 
     <!-- ClipperLib for boolean operations -->
     <script src="https://cdn.jsdelivr.net/gh/junmer/clipper-lib@master/clipper.js"></script>
+
+    <!-- Three.js for the embedded 3D viewport (loaded lazily on first open) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
 </head>
 <body>
+    <a href="#canvas-container" class="skip-link">Skip to canvas</a>
+
     <!-- Tab Bar Container -->
     <div id="tab-bar-container" class="tab-bar-container">
         <!-- Toolbar buttons -->
-        <div class="toolbar-buttons">
-            <button id="btn-save" class="toolbar-btn" title="Save (Ctrl+S)">
+        <div class="toolbar-buttons" role="toolbar" aria-label="Main toolbar">
+            <button id="btn-save" class="toolbar-btn" title="Save (Ctrl+S)" aria-label="Save" aria-keyshortcuts="Control+S">
                 Save
             </button>
-            <button id="btn-load" class="toolbar-btn" title="Load">
+            <button id="btn-load" class="toolbar-btn" title="Load" aria-label="Load">
                 Load
             </button>
-            <button id="btn-export" class="toolbar-btn" title="Export File (Ctrl+O)">
+            <button id="btn-export" class="toolbar-btn" title="Export File (Ctrl+O)" aria-label="Export file" aria-keyshortcuts="Control+O">
                 Export
             </button>
-            <button id="btn-import" class="toolbar-btn" title="Import File">
+            <button id="btn-import" class="toolbar-btn" title="Import File" aria-label="Import file">
                 Import
             </button>
-            <div class="toolbar-separator"></div>
-            <button id="btn-undo" class="toolbar-btn" title="Undo (Ctrl+Z)">
+            <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
+            <button id="btn-undo" class="toolbar-btn" title="Undo (Ctrl+Z)" aria-label="Undo" aria-keyshortcuts="Control+Z">
                 Undo
             </button>
-            <button id="btn-redo" class="toolbar-btn" title="Redo (Ctrl+Y)">
+            <button id="btn-redo" class="toolbar-btn" title="Redo (Ctrl+Y)" aria-label="Redo" aria-keyshortcuts="Control+Y">
                 Redo
             </button>
-            <div class="toolbar-separator"></div>
-            <button id="btn-free-draw" class="toolbar-btn" title="Path Tool">
+            <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
+            <button id="btn-free-draw" class="toolbar-btn" title="Path Tool" aria-label="Path tool" aria-pressed="false">
                 Path
             </button>
-            <button id="btn-assembly" class="toolbar-btn" title="Assembly Plan (3D)">
-                Assembly
+            <button id="btn-assembly" class="toolbar-btn" title="Toggle live 3D view" aria-label="Toggle 3D view" aria-pressed="false">
+                3D
             </button>
         </div>
     </div>
-    
+
+    <!-- Polite live region for app notifications (Saved, errors, …) -->
+    <div id="notification-region" role="status" aria-live="polite" class="visually-hidden"></div>
+
     <!-- Main Layout -->
-    <div class="main-layout">
+    <main class="main-layout" aria-label="Design workspace">
         <!-- Left Panel -->
-        <div id="left-panel" class="panel left-panel">
+        <div id="left-panel" class="panel left-panel" role="complementary" aria-label="Authoring tools">
             <div class="panel-header">
-                <div class="panel-tabs">
-                    <button class="panel-tab active" type="button" data-panel="library">Library</button>
-                    <button class="panel-tab" type="button" data-panel="blocks">Blocks</button>
-                    <button class="panel-tab" type="button" data-panel="code">Code</button>
+                <div class="panel-tabs" role="tablist" aria-label="Authoring mode">
+                    <button class="panel-tab active" type="button" role="tab" id="tab-library" aria-selected="true" aria-controls="shape-library-container" data-panel="library">Library</button>
+                    <button class="panel-tab" type="button" role="tab" id="tab-blocks" aria-selected="false" aria-controls="blockly-container" data-panel="blocks">Blocks</button>
+                    <button class="panel-tab" type="button" role="tab" id="tab-code" aria-selected="false" aria-controls="code-editor-container" data-panel="code">Code</button>
                 </div>
             </div>
-            <div id="shape-library-container" class="panel-content panel-content-tab" data-panel="library"></div>
-            <div id="blockly-container" class="panel-content panel-content-tab is-hidden" data-panel="blocks"></div>
-            <div id="code-editor-container" class="panel-content panel-content-tab is-hidden" data-panel="code"></div>
+            <div id="shape-library-container" class="panel-content panel-content-tab" role="tabpanel" aria-labelledby="tab-library" data-panel="library"></div>
+            <div id="blockly-container" class="panel-content panel-content-tab is-hidden" role="tabpanel" aria-labelledby="tab-blocks" data-panel="blocks"></div>
+            <div id="code-editor-container" class="panel-content panel-content-tab is-hidden" role="tabpanel" aria-labelledby="tab-code" data-panel="code"></div>
         </div>
         
         <!-- Left Resize Handle -->
@@ -71,27 +86,34 @@
         
         <!-- Center Canvas Area -->
         <div id="canvas-container" class="canvas-container">
-            <canvas id="main-canvas"></canvas>
+            <canvas id="main-canvas" tabindex="0" role="application"
+                    aria-label="Design canvas. Use arrow keys to move the selected shape, Tab to cycle shapes, Delete to remove.">
+            </canvas>
+            <!-- Visually-hidden live region announcing selection changes -->
+            <div id="canvas-status" role="status" aria-live="polite" class="visually-hidden"></div>
             <!-- Zoom Controls -->
             <div id="zoom-controls-container" class="zoom-controls-container"></div>
         </div>
-        
+
+        <!-- Live 3D viewport (collapsible; hidden until toggled) -->
+        <div id="viewport-3d-container" class="viewport-3d-container is-hidden" aria-label="3D preview"></div>
+
         <!-- Right Resize Handle -->
         <div class="resize-handle resize-handle-vertical" data-resize="right"></div>
         
         <!-- Right Panel -->
-        <div id="right-panel" class="panel right-panel">
+        <div id="right-panel" class="panel right-panel" role="complementary" aria-label="Inspector">
             <div class="panel-header">
-                <h3>Properties</h3>
+                <h3 id="properties-heading">Properties</h3>
             </div>
-            <div id="properties-panel-container" class="panel-content"></div>
-            
+            <div id="properties-panel-container" class="panel-content" role="region" aria-labelledby="properties-heading"></div>
+
             <div class="panel-header">
-                <h3>Parameters</h3>
+                <h3 id="parameters-heading">Parameters</h3>
             </div>
-            <div id="parameters-menu-container" class="panel-content"></div>
+            <div id="parameters-menu-container" class="panel-content" role="region" aria-labelledby="parameters-heading"></div>
         </div>
-    </div>
+    </main>
     
     <script src="https://unpkg.com/blockly/blockly.min.js"></script>
     <script type="module" src="./src/main.js"></script>

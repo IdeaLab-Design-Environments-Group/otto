@@ -26,6 +26,7 @@ import { Slot } from './Slot.js';
 import { Arrow } from './Arrow.js';
 import { ChamferRectangle } from './ChamferRectangle.js';
 import { createBindingFromJSON } from '../BindingRegistry.js';
+import EventBus, { EVENTS } from '../../events/EventBus.js';
 
 /**
  * Shape registry entry
@@ -44,6 +45,10 @@ export class ShapeRegistry {
     // Counter for generating readable IDs per shape type
     static #idCounters = new Map();
 
+    // True once the built-in shapes are registered; gates the
+    // SHAPE_TYPE_REGISTERED event so the bulk static registration stays quiet.
+    static #initialized = false;
+
     // Initialize registry with default shapes. Each class carries its own
     // static type and SCHEMA; registerClass derives the factory and fromJSON
     // from those, so registering a shape is a single line.
@@ -53,6 +58,7 @@ export class ShapeRegistry {
             Ellipse, Arc, RoundedRectangle, Donut, Cross, Gear, Spiral,
             Wave, Slot, Arrow, ChamferRectangle
         ].forEach(cls => this.registerClass(cls));
+        this.#initialized = true;
     }
 
     /**
@@ -103,6 +109,22 @@ export class ShapeRegistry {
             createFunction,
             fromJSONFunction
         ));
+        // Notify listeners (e.g. ShapeLibrary) that the type set changed.
+        // The static-block bulk registration runs before any listeners are
+        // attached, so this only matters for runtime/plugin registrations.
+        this.#notifyRegistered(normalizedType);
+    }
+
+    /**
+     * Emit SHAPE_TYPE_REGISTERED so listeners (e.g. ShapeLibrary) refresh.
+     * Suppressed during the built-in bulk registration (no listeners yet).
+     * EventBus is a leaf module, so importing it here creates no cycle.
+     * @param {string} type
+     * @private
+     */
+    static #notifyRegistered(type) {
+        if (!this.#initialized) return; // stay quiet during bulk static setup
+        EventBus.emit(EVENTS.SHAPE_TYPE_REGISTERED, { type });
     }
     
     /**

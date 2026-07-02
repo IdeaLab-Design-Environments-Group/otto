@@ -302,10 +302,21 @@ export class AssemblyPieceFactory {
         shape2d.lineTo(end.x, end.y);
     }
 
+    /**
+     * @param {Object} shape
+     * @param {Object} [options]
+     * @param {number} [options.depth]  Per-shape extrusion thickness (2.5D).
+     *   Defaults to the factory's `thickness` for backward compatibility.
+     * @param {number} [options.z]  Per-shape base elevation off the work
+     *   plane (2.5D). Defaults to 0.
+     */
     createPiece(shape, options = {}) {
         if (!shape) return null;
 
-        const { geometry, width, height } = this.buildGeometry(shape, options);
+        const depth = Number(options.depth ?? this.thickness) || this.thickness;
+        const z = Number(options.z ?? shape.z ?? 0) || 0;
+
+        const { geometry, width, height } = this.buildGeometry(shape, { ...options, depth });
         if (!geometry) return null;
 
         const material = new THREE.MeshStandardMaterial({
@@ -322,11 +333,14 @@ export class AssemblyPieceFactory {
             type: shape.type,
             width,
             height,
+            depth,
+            z,
             isPiece: true,
-            lift: this.thickness / 2
+            lift: z + depth / 2
         };
 
-        mesh.position.y = this.thickness / 2;
+        // Base sits at z; extrusion centered → mesh center at z + depth/2.
+        mesh.position.y = z + depth / 2;
 
         this.addOutline(mesh, geometry);
 
@@ -338,7 +352,7 @@ export class AssemblyPieceFactory {
     }
 
     buildGeometry(shape, options = {}) {
-        const thickness = this.thickness;
+        const thickness = Number(options.depth ?? this.thickness) || this.thickness;
         let skipFemaleHoles = false;
 
         // Universal converter: use the shape's SVG path definition for all shapes

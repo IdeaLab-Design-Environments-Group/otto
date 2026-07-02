@@ -1,5 +1,16 @@
 # From Zero (FabAcademy-style): Rebuilding Otto v2 / “Nova Otto” from an Empty Folder
 
+> **⚠️ This guide predates the MVC + 2.5D refactor.** It still teaches the
+> core mental model (event bus, stores, bindings, geometry, editors), but
+> several specifics are now out of date: the monolithic `CanvasRenderer` has
+> been dissolved into a `CanvasView` + render passes + input controllers;
+> shapes are **schema-driven** (`static SCHEMA`) rather than hand-written
+> constructors; undo is a **per-tab command history** (not memento
+> snapshots); shapes carry bindable **`depth`/`z`** (2.5D) and the 3D view is
+> an **embedded live panel** (not a separate `assemble.html` page). For the
+> current architecture, read **`src/ARCHITECTURE.md`** — it is the source of
+> truth where it disagrees with this guide.
+
 This is a **build-from-scratch handbook** for re-implementing Otto v2 end-to-end. It is intentionally written like a FabAcademy documentation page: clear goals, repeatable steps, verification checklists, and “what went wrong / how I fixed it” notes.
 
 If you only want to *use* Otto, start at **Quickstart (run the app)**.  

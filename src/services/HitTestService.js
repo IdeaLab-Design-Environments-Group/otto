@@ -44,9 +44,10 @@ export class HitTestService {
      */
     hitTest(x, y) {
         const worldPos = this.vc.screenToWorld(x, y);
-        const resolvedShapes = this.context.shapeStore.getResolved();
+        // z-sorted (bottom-to-top); walk reverse so the topmost piece under
+        // the cursor wins — matches the 2.5D paint order in ShapesPass.
+        const resolvedShapes = this.context.shapeStore.getResolvedSorted();
 
-        // Check shapes in reverse order (last drawn = top)
         for (let i = resolvedShapes.length - 1; i >= 0; i--) {
             const shape = resolvedShapes[i];
             const rotation = Number(shape.rotation || 0);

@@ -12,7 +12,7 @@
  * @module ui/ShapeLibrary
  */
 import { Component } from './Component.js';
-import EventBus from '../events/EventBus.js';
+import EventBus, { EVENTS } from '../events/EventBus.js';
 
 /**
  * Map from shape-type string (lowercase) to a generator function that returns
@@ -144,6 +144,8 @@ export class ShapeLibrary extends Component {
         super(container);
         /** @type {typeof import('../models/shapes/ShapeRegistry.js').ShapeRegistry} */
         this.shapeRegistry = shapeRegistry;
+        // Re-render the palette when a plugin registers a new shape type.
+        this.subscribe(EVENTS.SHAPE_TYPE_REGISTERED, () => this.render());
     }
     
     /**
@@ -159,16 +161,55 @@ export class ShapeLibrary extends Component {
      */
     render() {
         this.container.innerHTML = '';
+        this.container.setAttribute('role', 'listbox');
+        this.container.setAttribute('aria-label', 'Shape library');
 
         const availableTypes = this.shapeRegistry.getAvailableTypes();
 
         // Filter out 'path' since it has a different creation method
         const filteredTypes = availableTypes.filter(type => type !== 'path');
 
-        filteredTypes.forEach(type => {
+        filteredTypes.forEach((type, index) => {
             const shapeItem = this.createShapeItem(type);
+            // Roving tabindex: only the first option is a tab stop.
+            shapeItem.setAttribute('tabindex', index === 0 ? '0' : '-1');
             this.container.appendChild(shapeItem);
         });
+
+        this.setupKeyboardNavigation();
+    }
+
+    /**
+     * Keyboard support for the palette: arrow keys move focus (roving
+     * tabindex); Enter/Space adds the focused shape at the viewport center
+     * (announced by the app's canvas status region). Mirrors the drag path.
+     */
+    setupKeyboardNavigation() {
+        if (this._keyHandler) {
+            this.container.removeEventListener('keydown', this._keyHandler);
+        }
+        this._keyHandler = (e) => {
+            const items = Array.from(this.container.querySelectorAll('.shape-item'));
+            if (items.length === 0) return;
+            const currentIndex = items.indexOf(document.activeElement);
+
+            const move = (delta) => {
+                const next = (currentIndex + delta + items.length) % items.length;
+                items.forEach((el, i) => el.setAttribute('tabindex', i === next ? '0' : '-1'));
+                items[next].focus();
+            };
+
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); move(1); }
+            else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); move(-1); }
+            else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+            else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+            else if ((e.key === 'Enter' || e.key === ' ') && currentIndex >= 0) {
+                e.preventDefault();
+                const type = items[currentIndex].dataset.shapeType;
+                this.emit(EVENTS.SHAPE_KEYBOARD_ADD, { type });
+            }
+        };
+        this.container.addEventListener('keydown', this._keyHandler);
     }
     
     /**
@@ -196,6 +237,8 @@ export class ShapeLibrary extends Component {
         const item = this.createElement('div', {
             class: 'shape-item',
             draggable: 'true',
+            role: 'option',
+            'aria-label': `${this.formatShapeName(type)} — drag to canvas or press Enter to add`,
             'data-shape-type': type
         });
         

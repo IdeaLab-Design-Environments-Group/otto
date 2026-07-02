@@ -3,6 +3,37 @@
  * Inspired by mods.js (MIT CBA / FabCloud)
  */
 
+/* ── Accessibility utilities ──────────────────────────────────────────── */
+
+/* Screen-reader-only content: present in the a11y tree, invisible on screen. */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip link: hidden until focused, then jumps to the canvas. */
+.skip-link {
+    position: absolute;
+    left: 8px;
+    top: -40px;
+    z-index: 1000;
+    padding: 8px 12px;
+    background: rgb(37, 99, 235);
+    color: #fff;
+    border-radius: 4px;
+    transition: top 0.15s ease;
+}
+.skip-link:focus {
+    top: 8px;
+}
+
 :root {
     /* WCAG 2.2 Compliant 3-Color Palette (60-30-10 Rule) */
     /* Dominant Color (60%) - Dark Blue Navigation - WCAG AA: 4.5:1+ contrast */
@@ -572,6 +603,26 @@ body.dark-theme .canvas-container {
     background: rgba(69, 212, 255, 0.15);
     outline: 3px dashed var(--menu-bg);
     outline-offset: -3px;
+}
+
+/* Embedded live 3D viewport panel (sits beside the canvas when toggled). */
+.viewport-3d-container {
+    flex: 1;
+    min-width: 240px;
+    position: relative;
+    overflow: hidden;
+    border-left: 1px solid var(--border-color, rgb(203, 213, 225));
+    background: rgb(212, 232, 242);
+}
+
+.viewport-3d-container.is-hidden {
+    display: none;
+}
+
+.viewport-3d-container canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 #main-canvas {

@@ -2,6 +2,7 @@
  * Edge Joinery Context Menu
  * Shows joint type options and parameters for the selected edge.
  */
+import { FocusTrap } from './a11y/FocusTrap.js';
 
 const JOINT_TYPES = [
     { id: 'finger_joint', label: 'Finger Joint' },
@@ -26,7 +27,11 @@ export class EdgeJoineryMenu {
         this.isOpen = false;
         this.root = document.createElement('div');
         this.root.className = 'edge-joinery-menu';
-        this.root.setAttribute('role', 'menu');
+        // A modal-ish popover for configuring an edge joint: dialog semantics
+        // + focus trap so keyboard users stay within it until they act/dismiss.
+        this.root.setAttribute('role', 'dialog');
+        this.root.setAttribute('aria-modal', 'true');
+        this.root.setAttribute('aria-label', 'Edge joinery');
         this.root.setAttribute('aria-hidden', 'true');
         this.root.addEventListener('mousedown', (e) => e.stopPropagation());
         this.root.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -217,12 +222,18 @@ export class EdgeJoineryMenu {
         this.root.setAttribute('aria-hidden', 'true');
         document.removeEventListener('mousedown', this.onDocumentMouseDown);
         document.removeEventListener('keydown', this.onDocumentKeyDown);
+        // Release the focus trap and return focus to the canvas.
+        this.focusTrap?.release();
+        this.focusTrap = null;
     }
 
     open() {
         this.isOpen = true;
         this.root.classList.add('is-open');
         this.root.setAttribute('aria-hidden', 'false');
+        // Trap keyboard focus inside the dialog while it is open.
+        this.focusTrap = new FocusTrap(this.root);
+        this.focusTrap.activate();
         setTimeout(() => {
             document.addEventListener('mousedown', this.onDocumentMouseDown);
             document.addEventListener('keydown', this.onDocumentKeyDown);

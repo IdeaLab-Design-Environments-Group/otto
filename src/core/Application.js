@@ -9,7 +9,11 @@ import { SceneContext } from './SceneContext.js';
 import { ViewportController } from '../controllers/ViewportController.js';
 import { InteractionState } from '../controllers/InteractionState.js';
 import { HitTestService } from '../services/HitTestService.js';
-import { RemoveShapesCommand } from '../commands/shapeCommands.js';
+import { RemoveShapesCommand, AddShapeCommand } from '../commands/shapeCommands.js';
+import { CommandCatalog } from '../commands/CommandCatalog.js';
+import { PluginManager } from '../plugins/PluginManager.js';
+import { BindingRegistry } from '../models/BindingRegistry.js';
+import { LiveRegion } from '../ui/a11y/LiveRegion.js';
 import { CanvasView } from '../views/canvas/CanvasView.js';
 import { CanvasInputController } from '../controllers/CanvasInputController.js';
 import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
@@ -210,6 +214,11 @@ export class Application {
             }
         });
 
+        // Accessibility: wire the live regions for status + selection.
+        this.liveRegion = new LiveRegion(document.getElementById('notification-region'));
+        this.canvasStatus = new LiveRegion(document.getElementById('canvas-status'));
+        this.setupCanvasAnnouncements();
+
         // Setup event listeners
         this.setupEventListeners();
 
@@ -219,14 +228,59 @@ export class Application {
         // Setup keyboard shortcuts
         this.setupKeyboardShortcuts();
         
+        // Command catalog (backs plugin command registration + tooling).
+        this.commandCatalog = new CommandCatalog();
+
+        // Plugin system: instantiate, load any plugins the host declared on
+        // window.OTTO_PLUGINS, then fire the app:init lifecycle hook. The
+        // SceneContext doubles as the PluginAPI's sceneState (it exposes
+        // shapeStore/parameterStore/viewport getters for the active tab).
+        this.pluginManager = new PluginManager({
+            eventBus: EventBus,
+            shapeRegistry: ShapeRegistry,
+            bindingRegistry: BindingRegistry,
+            commandRegistry: this.commandCatalog,
+            sceneState: this.context,
+            application: this,
+            geometry: this.geometry
+        });
+        this.initPlugins();
+
         // Load initial state (autosave if available)
         this.loadInitialState();
-        
+
         // Start autosave
         this.storageManager.startAutoSave();
-        
+
         // Initialize undo/redo button states
         this.updateUndoRedoUI();
+    }
+
+    /**
+     * Load and activate host-declared plugins (window.OTTO_PLUGINS: an array
+     * of module paths or Plugin classes), then fire lifecycle hooks. Async
+     * but not awaited by init() — plugins load in the background.
+     */
+    async initPlugins() {
+        try {
+            const declared = (typeof window !== 'undefined' && window.OTTO_PLUGINS) || [];
+            for (const source of declared) {
+                const plugin = await this.pluginManager.load(source);
+                if (plugin) {
+                    await this.pluginManager.activate(plugin.id);
+                }
+            }
+
+            // scene:loaded fires on load and on tab switch.
+            EventBus.subscribe(EVENTS.SCENE_LOADED, () =>
+                this.pluginManager.api.executeHook('scene:loaded', { app: this }));
+            EventBus.subscribe(EVENTS.TAB_SWITCHED, () =>
+                this.pluginManager.api.executeHook('scene:loaded', { app: this }));
+
+            await this.pluginManager.api.executeHook('app:init', { app: this });
+        } catch (error) {
+            console.error('Plugin initialization failed:', error);
+        }
     }
     
     /**
@@ -245,6 +299,18 @@ export class Application {
 
         // Undo/redo button state follows the active tab's HistoryManager.
         EventBus.subscribe(EVENTS.HISTORY_CHANGED, () => this.updateUndoRedoUI());
+
+        // Keyboard-added shapes (Enter/Space in the Shape Library) land at the
+        // viewport center via the same undoable AddShapeCommand as a drop.
+        EventBus.subscribe(EVENTS.SHAPE_KEYBOARD_ADD, ({ type }) => {
+            if (!type || !this.context) return;
+            const center = this.viewportController.screenToWorld(
+                (this.viewportController.cssWidth || 300) / 2,
+                (this.viewportController.cssHeight || 300) / 2
+            );
+            const shape = ShapeRegistry.create(type, center, {}, this.context.shapeStore);
+            this.context.history.execute(new AddShapeCommand(shape));
+        });
     }
     
     /**
@@ -363,6 +429,9 @@ export class Application {
             tabButtons.forEach(button => {
                 const isActive = button.dataset.panel === panelName;
                 button.classList.toggle('active', isActive);
+                // ARIA tab state + roving tabindex.
+                button.setAttribute('aria-selected', String(isActive));
+                button.setAttribute('tabindex', isActive ? '0' : '-1');
             });
             tabPanels.forEach(panel => {
                 const isActive = panel.dataset.panel === panelName;
@@ -374,13 +443,45 @@ export class Application {
             }
         };
 
-        tabButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                setActive(button.dataset.panel);
+        tabButtons.forEach((button, index) => {
+            button.addEventListener('click', () => setActive(button.dataset.panel));
+            // Left/Right arrow keys move between tabs (WAI-ARIA tablist).
+            button.addEventListener('keydown', (e) => {
+                let target = null;
+                if (e.key === 'ArrowRight') target = tabButtons[(index + 1) % tabButtons.length];
+                else if (e.key === 'ArrowLeft') target = tabButtons[(index - 1 + tabButtons.length) % tabButtons.length];
+                else if (e.key === 'Home') target = tabButtons[0];
+                else if (e.key === 'End') target = tabButtons[tabButtons.length - 1];
+                if (target) {
+                    e.preventDefault();
+                    setActive(target.dataset.panel);
+                    target.focus();
+                }
             });
         });
 
         setActive('library');
+    }
+
+    /**
+     * Announce selection changes on the canvas to screen readers via the
+     * visually-hidden #canvas-status live region.
+     */
+    setupCanvasAnnouncements() {
+        EventBus.subscribe(EVENTS.SHAPE_SELECTED, (payload) => {
+            if (!this.canvasStatus) return;
+            const total = this.context?.scene?.shapeStore.getAll().length ?? 0;
+            const ids = payload?.selectedIds ?? (payload?.id ? [payload.id] : []);
+            if (!ids.length || !payload?.id) {
+                this.canvasStatus.announce('Selection cleared');
+                return;
+            }
+            if (ids.length === 1) {
+                this.canvasStatus.announce(`${payload.id} selected, 1 of ${total} shapes`);
+            } else {
+                this.canvasStatus.announce(`${ids.length} shapes selected of ${total}`);
+            }
+        });
     }
     
     /**
@@ -425,8 +526,10 @@ export class Application {
     /**
      * Save current state (manual save to localStorage)
      */
-    save() {
+    async save() {
+        await this.pluginManager?.api.executeHook('before-save', { app: this });
         const success = this.storageManager.save();
+        await this.pluginManager?.api.executeHook('after-save', { app: this, success });
         if (success) {
             console.log('Saved successfully');
             this.showNotification('Saved successfully!', 'success');
@@ -499,11 +602,14 @@ export class Application {
      * @param {string} type - 'success' or 'error'
      */
     showNotification(message, type = 'success') {
+        // Announce to assistive tech via the persistent live region.
+        this.liveRegion?.announce(message);
+
         // Create notification element
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         notification.textContent = message;
-        
+
         // Add to document
         document.body.appendChild(notification);
         
@@ -567,6 +673,38 @@ export class Application {
         if (idsToDelete.length > 0) {
             this.context.history.execute(new RemoveShapesCommand(idsToDelete));
         }
+    }
+
+    /**
+     * Toggle the embedded live 3D viewport. Three.js and the Viewport3D
+     * component are lazy-loaded on first open, so the 2D editor's initial
+     * load pays nothing for the 3D stack.
+     *
+     * @returns {Promise<boolean>} The new visibility state.
+     */
+    async toggle3D() {
+        const container = document.getElementById('viewport-3d-container');
+        const button = document.getElementById('btn-assembly');
+        if (!container) return false;
+
+        const willShow = container.classList.contains('is-hidden');
+        container.classList.toggle('is-hidden', !willShow);
+        if (button) button.setAttribute('aria-pressed', String(willShow));
+
+        if (willShow) {
+            if (!this.viewport3D) {
+                const { Viewport3D } = await import('../views/viewport3d/Viewport3D.js');
+                this.viewport3D = new Viewport3D(container, { context: this.context });
+                this.viewport3D.mount();
+            }
+            this.viewport3D.start();
+            // The canvas shrank to make room; refit it.
+            this.canvasView?.resizeCanvas();
+        } else if (this.viewport3D) {
+            this.viewport3D.stop();
+            this.canvasView?.resizeCanvas();
+        }
+        return willShow;
     }
 
     /**

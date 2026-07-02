@@ -1,3 +1,4 @@
+import { resolveColorName } from './colorPalette.js';
 // lexer.js - Updated with enhanced fill support
 export class Token {
   constructor(type, value, line, column) {
@@ -450,33 +451,7 @@ export class Lexer {
 
   // Helper method to resolve color names to hex values
   static resolveColorName(colorName) {
-    const colorMap = {
-      'red': '#FF0000',
-      'green': '#008000',
-      'blue': '#0000FF',
-      'yellow': '#FFFF00',
-      'orange': '#FFA500',
-      'purple': '#800080',
-      'pink': '#FFC0CB',
-      'brown': '#A52A2A',
-      'black': '#000000',
-      'white': '#FFFFFF',
-      'gray': '#808080',
-      'grey': '#808080',
-      'lightgray': '#D3D3D3',
-      'lightgrey': '#D3D3D3',
-      'darkgray': '#A9A9A9',
-      'darkgrey': '#A9A9A9',
-      'cyan': '#00FFFF',
-      'magenta': '#FF00FF',
-      'lime': '#00FF00',
-      'navy': '#000080',
-      'teal': '#008080',
-      'silver': '#C0C0C0',
-      'gold': '#FFD700',
-      'transparent': 'transparent'
-    };
-    
-    return colorMap[colorName.toLowerCase()] || colorName;
+    // Delegates to the shared AQUI color palette.
+    return resolveColorName(colorName);
   }
 }

@@ -24,7 +24,7 @@ export class Serializer {
      * this field and run the appropriate migration before deserializing.
      * @type {string}
      */
-    static VERSION = '1.0.0';
+    static VERSION = '2.0.0';
 
     /**
      * Convert a fully-populated {@link TabManager} into a human-readable
@@ -74,12 +74,23 @@ export class Serializer {
      * @throws {Error} If the JSON is malformed or missing the version field.
      */
     static async deserialize(json) {
-        const data = JSON.parse(json);
-        
+        let data = JSON.parse(json);
+
         if (!data.version) {
             throw new Error('Invalid file format: missing version');
         }
-        
+
+        // Upgrade older payloads to the current format before rebuilding.
+        const { migrate } = await import('./Migrations.js');
+        data = migrate(data);
+
+        if (data.version !== this.VERSION) {
+            throw new Error(
+                `Unsupported scene version "${data.version}" (this build reads ${this.VERSION}). ` +
+                `The file may have been saved by a newer version of Otto.`
+            );
+        }
+
         const { TabManager } = await import('../core/TabManager.js');
         const tabManager = new TabManager();
         

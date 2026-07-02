@@ -488,12 +488,18 @@ PARAMETERS
 
 SHAPES
   shape type name { properties }
-  
+
   Types: rectangle, circle, triangle,
          ellipse, polygon, star, arc,
          roundedrectangle, donut, cross,
          gear, spiral, wave, slot, arrow,
          chamferrectangle
+
+2.5D (every shape)
+  depth: <mm>   extrusion thickness (default 3)
+  z: <mm>       elevation off the work plane (default 0)
+  e.g.  shape circle c1 { radius: 30 depth: 6 z: 10 }
+  Both accept parameters:  depth: t
 
 TRANSFORMS
   transform shapeName {
