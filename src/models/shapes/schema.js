@@ -57,6 +57,30 @@ export const COMMON_SCHEMA = {
         label: 'Rotation',
         unit: 'deg',
         step: 1
+    },
+    // ── 2.5D properties (Otto is a 2.5D parametric environment) ──────────
+    // depth = extrusion thickness of the piece; z = elevation of its base
+    // off the work plane. Both are bindable (drive them from parameters like
+    // any other dimension) and flow through the whole stack automatically:
+    // Properties Panel rows, serialization, AQUI `depth:`/`z:` params, the
+    // Blocks generic prop blocks, and the 3D viewport's ExtrudeGeometry.
+    // z also determines 2D paint order (higher z paints on top).
+    depth: {
+        type: 'number',
+        default: 3,
+        bindable: true,
+        min: 0.5,
+        omitIfDefault: true,
+        label: 'Depth',
+        unit: 'mm'
+    },
+    z: {
+        type: 'number',
+        default: 0,
+        bindable: true,
+        omitIfDefault: true,
+        label: 'Elevation',
+        unit: 'mm'
     }
 };
 

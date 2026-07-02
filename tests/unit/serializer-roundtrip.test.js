@@ -18,8 +18,8 @@ import { loadFixtureText } from '../fixture-io.js';
 import { buildFixtureTabManager, FIXTURE_SHAPES } from '../fixtures/scene-fixture.js';
 import { Serializer } from '../../src/persistence/Serializer.js';
 
-test('fixture builder output matches captured scene-v1.json byte-for-byte', async () => {
-    const expected = await loadFixtureText('scene-v1.json');
+test('fixture builder output matches captured scene-v2.json byte-for-byte', async () => {
+    const expected = await loadFixtureText('scene-v2.json');
     const actual = Serializer.serialize(buildFixtureTabManager());
     assertEqual(actual, expected.trimEnd(), 'wire format drifted — existing autosaves would break');
 });
@@ -31,13 +31,18 @@ test('deserialize(serialize(x)) is stable', async () => {
     assertEqual(json2, json, 'second-generation serialization differs');
 });
 
-test('captured v1 fixture still deserializes', async () => {
+test('captured v1 fixture migrates (1.0.0 → 2.0.0) and deserializes', async () => {
     const text = await loadFixtureText('scene-v1.json');
     const tm = await Serializer.deserialize(text);
     assertEqual(tm.tabs.length, 1);
     assertEqual(tm.activeTabId, 'tab-fixture-1');
     const store = tm.getActiveScene().shapeStore;
     assertEqual(store.getAll().length, FIXTURE_SHAPES.length, 'shape count');
+    // Every shape gains 2.5D defaults after migration/load.
+    for (const shape of store.getAll()) {
+        assertEqual(shape.depth, 3, `${shape.id} depth default`);
+        assertEqual(shape.z, 0, `${shape.id} z default`);
+    }
 });
 
 test('every registered shape type round-trips with properties and bindings', async () => {

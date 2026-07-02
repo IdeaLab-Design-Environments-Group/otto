@@ -169,12 +169,12 @@ function setupToolbarButtons(app) {
         });
     }
 
-    // Assembly plan button - navigates to 3D assembly view
-    // Opens a separate page for visualizing 3D assembly of 2D parts
+    // 3D button - toggles the embedded live 3D viewport (lazy-loaded).
     const btnAssembly = document.getElementById('btn-assembly');
     if (btnAssembly) {
-        btnAssembly.addEventListener('click', () => {
-            window.location.href = './assemble.html';
+        btnAssembly.addEventListener('click', async () => {
+            const shown = await app.toggle3D();
+            btnAssembly.classList.toggle('active', shown);
         });
     }
 }

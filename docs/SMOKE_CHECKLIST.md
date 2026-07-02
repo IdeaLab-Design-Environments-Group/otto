@@ -67,12 +67,21 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 - [ ] Undo/redo across a mixed session (create → move → bind → param change →
       code run → delete) behaves predictably at every step
 
-## 3D view
-- [ ] Open the 3D view — every canvas shape appears extruded
+## 3D view (embedded, live)
+- [ ] Click the "3D" toolbar button — the panel opens beside the canvas and
+      every shape appears extruded (canvas refits to the narrower space)
 - [ ] Joinery: male tabs and female holes visible on jointed edges
-- [ ] Orbit works; back navigation returns to the editor
-- [ ] (Post-Phase 4) Per-shape depth/z reflected in extrusion and elevation
-- [ ] (Post-Phase 5) Live sync: canvas edits update the 3D panel without reload
+- [ ] Orbit (drag) works; clicking a 3D piece selects the shape (panel updates)
+- [ ] Selecting a shape on the canvas highlights its 3D piece
+- [ ] Drag a shape on the canvas → its mesh follows after the debounce
+- [ ] Bind depth to a parameter, scrub the slider → extrusion thickness updates live
+- [ ] Change z → the piece elevates off the table
+- [ ] Edit joinery → teeth rebuild in 3D
+- [ ] Switch tabs → the 3D scene swaps to the new tab's shapes
+- [ ] 50-shape scene + slider scrub stays smooth (transform-only fast path)
+- [ ] Donut still renders with its hole
+- [ ] Toggle "3D" off → panel hides, canvas expands, render loop stops
+- [ ] Old bookmark to assemble.html redirects to the editor
 
 ## Accessibility (post-Phase 7)
 - [ ] Complete the core flow keyboard-only (no mouse)

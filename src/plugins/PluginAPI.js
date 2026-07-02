@@ -136,6 +136,13 @@ export class PluginAPI {
      * );
      */
     registerShape(type, createFn, fromJSONFn) {
+        // Two accepted forms:
+        //   registerShape(ShapeClass)                       — schema-driven class
+        //   registerShape(type, createFn, fromJSONFn)       — legacy triple
+        if (typeof type === 'function' && type.type) {
+            this._shapeRegistry.registerClass(type);
+            return;
+        }
         this._shapeRegistry.register(type, createFn, fromJSONFn);
     }
 
@@ -219,9 +226,11 @@ export class PluginAPI {
      * api.registerCommand('alignShapes', AlignShapesCommand);
      */
     registerCommand(name, CommandClass) {
-        if (this._commandRegistry) {
-            this._commandRegistry.register(name, CommandClass);
-        }
+        if (!this._commandRegistry) return;
+        // CommandCatalog stores factories `(...args) => Command`; adapt a
+        // command CLASS into one so `new`-based plugins keep working.
+        const factory = (...args) => new CommandClass(...args);
+        this._commandRegistry.register(name, factory);
     }
 
     /**
@@ -240,10 +249,16 @@ export class PluginAPI {
      * @param {Object} args - Arguments for command constructor
      * @returns {*} Command execution result
      */
-    executeCommand(name, args) {
-        if (this._commandRegistry) {
-            return this._commandRegistry.execute(name, args);
+    executeCommand(name, ...args) {
+        if (!this._commandRegistry || !this._sceneState) return;
+        // Build the command via the catalog and run it through the active
+        // tab's history so it participates in undo/redo.
+        const command = this._commandRegistry.create(name, ...args);
+        const history = this._application?.context?.history;
+        if (history) {
+            return history.execute(command);
         }
+        return command.execute(this._sceneState);
     }
 
     // ===========================================

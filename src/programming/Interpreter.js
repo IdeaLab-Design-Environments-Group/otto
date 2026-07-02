@@ -1,4 +1,5 @@
 // interpreter.js - Visitor Pattern based interpreter
+import { COLOR_MAP } from './colorPalette.js';
 import { Environment } from './Environment.js';
 import { booleanOperator } from './BooleanOperators.js';
 import { TurtleDrawer } from './TurtleDrawer.js';
@@ -42,15 +43,8 @@ export class Interpreter {
       functionCall: new FunctionVisitor(this) // FunctionVisitor handles both definition and call
     };
     
-    // Color resolution map
-    this.colorMap = {
-      'red': '#FF0000', 'green': '#008000', 'blue': '#0000FF', 'yellow': '#FFFF00',
-      'orange': '#FFA500', 'purple': '#800080', 'pink': '#FFC0CB', 'brown': '#A52A2A',
-      'black': '#000000', 'white': '#FFFFFF', 'gray': '#808080', 'grey': '#808080',
-      'lightgray': '#D3D3D3', 'lightgrey': '#D3D3D3', 'darkgray': '#A9A9A9', 'darkgrey': '#A9A9A9',
-      'cyan': '#00FFFF', 'magenta': '#FF00FF', 'lime': '#00FF00', 'navy': '#000080',
-      'teal': '#008080', 'silver': '#C0C0C0', 'gold': '#FFD700', 'transparent': 'transparent'
-    };
+    // Shared AQUI color-name map (see programming/colorPalette.js).
+    this.colorMap = COLOR_MAP;
   }
 
   interpret(ast) {

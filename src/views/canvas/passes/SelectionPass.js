@@ -100,7 +100,7 @@ export class SelectionPass {
             const rotation = Number(shape.rotation || 0);
             // Draw selection brackets + dimensions
             this.renderSelectionBrackets(frame, bounds);
-            this.renderSelectionDimensions(frame, bounds);
+            this.renderSelectionDimensions(frame, bounds, shapeForBounds);
             // Rotation handle
             this.renderRotationHandle(frame, bounds, rotation);
 
@@ -286,9 +286,13 @@ export class SelectionPass {
     }
 
     /**
-     * Render width/height dimension labels for selection.
+     * Render width/height dimension labels for selection, plus a 2.5D
+     * depth/elevation badge above the shape.
+     * @param {Object} frame
+     * @param {{x,y,width,height}} bounds
+     * @param {?Object} shape - Resolved shape (for its depth/z); optional.
      */
-    renderSelectionDimensions(frame, bounds) {
+    renderSelectionDimensions(frame, bounds, shape = null) {
         const { ctx } = frame;
         const padding = 8;
         const x = bounds.x - padding;
@@ -366,6 +370,21 @@ export class SelectionPass {
         ctx.fillStyle = textColor;
         ctx.fillText(heightText, 0, 0);
         ctx.restore();
+
+        // 2.5D badge: depth + elevation, centered above the shape.
+        if (shape) {
+            const depth = Number(shape.depth ?? 3);
+            const z = Number(shape.z ?? 0);
+            const badge = `d ${depth.toFixed(1)}mm · z ${z.toFixed(1)}mm`;
+            const badgeX = x + w / 2;
+            const badgeY = y - 12 / frame.viewport.zoom;
+            const bw = ctx.measureText(badge).width + textPadding * 2;
+            const bh = fontSize + textPadding * 2;
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.fillRect(badgeX - bw / 2, badgeY - bh / 2, bw, bh);
+            ctx.fillStyle = textColor;
+            ctx.fillText(badge, badgeX, badgeY);
+        }
 
         ctx.restore();
     }
