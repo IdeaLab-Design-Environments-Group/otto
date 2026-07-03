@@ -123,6 +123,12 @@ function setupToolbarButtons(app) {
             await app.importFile();
         });
     }
+
+    // Import an STL as a 2.5D footprint piece.
+    const btnImportStl = document.getElementById('btn-import-stl');
+    if (btnImportStl) {
+        btnImportStl.addEventListener('click', () => app.importSTL());
+    }
     
     // Undo button - reverts the last command on the active tab's history.
     const btnUndo = document.getElementById('btn-undo');

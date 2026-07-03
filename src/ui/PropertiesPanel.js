@@ -5,7 +5,7 @@
 import { Component } from './Component.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { LiteralBinding, ParameterBinding, ExpressionBinding } from '../models/Binding.js';
-import { SetBindingCommand } from '../commands/shapeCommands.js';
+import { SetBindingCommand, SetShapePropertyCommand } from '../commands/shapeCommands.js';
 
 export class PropertiesPanel extends Component {
     /**
@@ -122,6 +122,24 @@ export class PropertiesPanel extends Component {
 
         // Render all shapes in compact layers format
         this.renderLayersList(allShapes);
+
+        // Below the list, show editors for the current selection: every
+        // bindable property (x/y/size/depth/z/tilt/cutDepth…) plus the
+        // Face plane dropdown. Without this the panel is just a shape list —
+        // there is nowhere to change these values.
+        const selectedIds = Array.from(this.shapeStore.getSelectedIds());
+        if (selectedIds.length > 1) {
+            const divider = this.createElement('div', { class: 'properties-separator' });
+            this.container.appendChild(divider);
+            this.renderMultiSelection();
+        } else {
+            const shape = this.shapeStore.getSelected() || this.selectedShape;
+            if (shape && this.shapeStore.get(shape.id)) {
+                const divider = this.createElement('div', { class: 'properties-separator' });
+                this.container.appendChild(divider);
+                this.renderProperties(this.shapeStore.get(shape.id));
+            }
+        }
     }
 
     /**
@@ -421,9 +439,49 @@ export class PropertiesPanel extends Component {
             }
             const bindingEditor = this.renderBindingEditor(property, binding, currentValue, shape);
             propItem.appendChild(bindingEditor);
-            
+
             this.container.appendChild(propItem);
         });
+
+        // Enum properties (e.g. facePlane) — rendered as a dropdown, since
+        // they are not numeric/bindable.
+        const schema = shape.constructor.fullSchema ?? {};
+        for (const [prop, desc] of Object.entries(schema)) {
+            if (desc.type !== 'enum') continue;
+            this.container.appendChild(this.renderEnumProperty(shape, prop, desc));
+        }
+    }
+
+    /**
+     * Render a labelled dropdown for an enum schema property, dispatching a
+     * SetShapePropertyCommand on change (falls back to a direct write).
+     * @param {Shape} shape
+     * @param {string} property
+     * @param {Object} desc - PropertyDescriptor with options / optionLabels.
+     * @returns {HTMLElement}
+     */
+    renderEnumProperty(shape, property, desc) {
+        const item = this.createElement('div', { class: 'property-item' });
+        item.appendChild(this.createElement('label', {}, `${desc.label || property}:`));
+
+        const select = this.createElement('select', { class: 'binding-input' });
+        (desc.options || []).forEach(opt => {
+            const label = (desc.optionLabels && desc.optionLabels[opt]) || opt;
+            const option = this.createElement('option', { value: opt }, label);
+            if (shape[property] === opt) option.selected = true;
+            select.appendChild(option);
+        });
+        select.addEventListener('change', () => {
+            const value = select.value;
+            if (this.context && this.context.history) {
+                this.context.history.execute(new SetShapePropertyCommand(shape.id, property, value));
+            } else {
+                shape[property] = value;
+                EventBus.emit(EVENTS.PARAM_CHANGED, { shapeId: shape.id, property });
+            }
+        });
+        item.appendChild(select);
+        return item;
     }
     
     /**

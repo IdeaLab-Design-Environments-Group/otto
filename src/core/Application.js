@@ -14,6 +14,8 @@ import { CommandCatalog } from '../commands/CommandCatalog.js';
 import { PluginManager } from '../plugins/PluginManager.js';
 import { BindingRegistry } from '../models/BindingRegistry.js';
 import { LiveRegion } from '../ui/a11y/LiveRegion.js';
+import { StlImporter } from '../persistence/StlImporter.js';
+import { PathShape } from '../models/shapes/PathShape.js';
 import { CanvasView } from '../views/canvas/CanvasView.js';
 import { CanvasInputController } from '../controllers/CanvasInputController.js';
 import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
@@ -597,8 +599,128 @@ export class Application {
     }
     
     /**
+     * Import a 3D STL file as a 2.5D footprint piece.
+     *
+     * Opens a file picker, parses the STL (ASCII or binary), reduces it to the
+     * convex-hull footprint of its top-down projection, and adds it as a closed
+     * PathShape at the viewport centre — carrying the model's Z-extent as the
+     * piece's `depth` so extruding it in 3D reproduces the original bounding
+     * volume. Added through AddShapeCommand, so it participates in undo.
+     */
+    importSTL() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.stl,model/stl,application/sla';
+        input.addEventListener('change', () => {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const parsed = StlImporter.parse(reader.result);
+
+                    // A 3D model has three silhouettes; pick the most
+                    // distinctive by default (a house's gabled FRONT beats its
+                    // square top), and let the user override the view.
+                    const autoPlane = StlImporter.bestPlane(parsed);
+                    const raw = StlImporter.footprint(parsed, 1, autoPlane);
+                    if (raw.points.length < 3) {
+                        this.showNotification('STL footprint is degenerate (no area)', 'error');
+                        return;
+                    }
+
+                    // STL carries NO units and NO fixed orientation, so confirm
+                    // both scale and view in one prompt ("<scale> [view]"):
+                    // press Enter to accept the auto view at the suggested
+                    // scale, or type e.g. "10 top" / "1 side".
+                    const prefill = StlImporter.suggestScale(raw);
+                    const viewName = { xy: 'top', xz: 'front', yz: 'side' };
+                    const answer = window.prompt(
+                        `"${file.name}" — ${viewName[autoPlane]} view imports as ` +
+                        `${raw.width.toFixed(1)} × ${raw.height.toFixed(1)} mm at scale 1.\n\n` +
+                        `Enter:  <scale> [view]\n` +
+                        `  scale: 1 keep · 10 cm→mm · 25.4 inch→mm · 1000 m→mm` +
+                        (prefill !== 1 ? ` · ${prefill} fit work area` : '') + `\n` +
+                        `  view:  top | front | side   (default: ${viewName[autoPlane]})`,
+                        String(prefill)
+                    );
+                    if (answer === null) return; // cancelled
+
+                    const tokens = answer.trim().split(/\s+/);
+                    const parsedScale = parseFloat(tokens[0]);
+                    const scale = Number.isFinite(parsedScale) && parsedScale > 0 ? parsedScale : 1;
+                    const planeByName = { top: 'xy', front: 'xz', side: 'yz' };
+                    const plane = planeByName[(tokens[1] || '').toLowerCase()] || autoPlane;
+
+                    this.addStlFootprint(parsed, file.name, { scale, plane });
+                } catch (error) {
+                    console.error('STL import failed:', error);
+                    this.showNotification(`Could not import STL: ${error.message}`, 'error');
+                }
+            };
+            reader.onerror = () => this.showNotification('Could not read the STL file', 'error');
+            reader.readAsArrayBuffer(file);
+        });
+        input.click();
+    }
+
+    /**
+     * Build and add the footprint PathShape from a parsed STL.
+     * @param {{triangles: Array, bounds: Object}} parsed - StlImporter.parse output.
+     * @param {string} [fileName]
+     * @param {{scale?: number, plane?: 'xy'|'xz'|'yz'}} [options]
+     */
+    addStlFootprint(parsed, fileName = 'stl', { scale = 1, plane = 'xy' } = {}) {
+        // The TRUE silhouette (concave-aware); falls back to the hull internally
+        // if the projection is degenerate.
+        const fp = StlImporter.silhouette(parsed, { scale, plane });
+        if (fp.points.length < 3) {
+            this.showNotification('STL footprint is degenerate (no area)', 'error');
+            return;
+        }
+
+        // Centre the footprint's BOUNDING BOX (not its vertex centroid) on the
+        // viewport, at true (scaled mm) size.
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of fp.points) {
+            minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        }
+        const bcx = (minX + maxX) / 2;
+        const bcy = (minY + maxY) / 2;
+        const center = this.viewportController.screenToWorld(
+            (this.viewportController.cssWidth || 300) / 2,
+            (this.viewportController.cssHeight || 300) / 2
+        );
+        const points = fp.points.map(p => ({ x: p.x - bcx + center.x, y: p.y - bcy + center.y }));
+
+        const id = ShapeRegistry.generateId('path', this.context.shapeStore);
+        const shape = new PathShape(id, {
+            position: { x: center.x, y: center.y },
+            points,
+            closed: true,
+            strokeWidth: 2,
+            depth: fp.depth,
+            z: 0
+        });
+
+        this.context.history.execute(new AddShapeCommand(shape));
+
+        // Frame the import so its size reads correctly regardless of scale.
+        this.zoomControls?.fitToContent();
+
+        const viewName = { xy: 'top', xz: 'front', yz: 'side' };
+        const holes = fp.holes > 0 ? ` — ${fp.holes} interior hole(s) not represented` : '';
+        this.showNotification(
+            `Imported ${fileName} (${viewName[fp.plane] || fp.plane} view): ` +
+            `${fp.width.toFixed(1)} × ${fp.height.toFixed(1)} mm, depth ${fp.depth.toFixed(1)} mm${holes}`,
+            'success'
+        );
+    }
+
+    /**
      * Show notification message
-     * @param {string} message 
+     * @param {string} message
      * @param {string} type - 'success' or 'error'
      */
     showNotification(message, type = 'success') {
@@ -692,14 +814,28 @@ export class Application {
         if (button) button.setAttribute('aria-pressed', String(willShow));
 
         if (willShow) {
-            if (!this.viewport3D) {
-                const { Viewport3D } = await import('../views/viewport3d/Viewport3D.js');
-                this.viewport3D = new Viewport3D(container, { context: this.context });
-                this.viewport3D.mount();
-            }
-            this.viewport3D.start();
-            // The canvas shrank to make room; refit it.
+            // The canvas shrank to make room; refit it BEFORE measuring the 3D
+            // panel so its layout (flex) has settled and clientWidth/Height are
+            // non-zero when the renderer sizes itself.
             this.canvasView?.resizeCanvas();
+            try {
+                if (!this.viewport3D) {
+                    const { Viewport3D } = await import('../views/viewport3d/Viewport3D.js');
+                    this.viewport3D = new Viewport3D(container, { context: this.context });
+                    this.viewport3D.mount();
+                }
+                this.viewport3D.start();
+            } catch (err) {
+                // Most likely Three.js failed to load from the CDN import map.
+                console.error('3D view failed to start', err);
+                this.showNotification(
+                    'The 3D view could not load (Three.js may be blocked/offline). Check your connection.',
+                    'error'
+                );
+                container.innerHTML =
+                    '<div style="padding:16px;color:#334155;font:13px sans-serif">' +
+                    '3D view could not load Three.js. Check your network/CDN access, then toggle again.</div>';
+            }
         } else if (this.viewport3D) {
             this.viewport3D.stop();
             this.canvasView?.resizeCanvas();

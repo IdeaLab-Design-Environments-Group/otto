@@ -55,6 +55,19 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 - [ ] Ctrl/Cmd+S saves; reload restores everything (shapes, bindings, joinery, viewport, tabs)
 - [ ] Export `.pds`, clear, re-import — scene identical
 - [ ] Autosave restores after a hard reload without manual save
+- [ ] **STL** button → pick an ASCII or binary `.stl` → a prompt shows the
+      auto-picked view + size and accepts `<scale> [view]` (Enter accepts;
+      `10 top`, `1 side`, etc.). The outline appears centered + framed;
+      `depth` = the extent along the view's perpendicular axis; the toast
+      reports the view + mm size. Undo removes it.
+- [ ] Import a *house* STL → it comes in as the gabled **front** silhouette
+      (peak up), not a flat square (the top view). Overriding `... top` gives
+      the square footprint instead.
+- [ ] Import a *concave* part (L-bracket, gear, letter) → the outline follows
+      the real (concave) silhouette, not a convex bounding shape; slanted edges
+      are clean lines, not staircases.
+- [ ] Import a part with a *hole* (washer/frame) → outer outline is correct and
+      the toast notes "N interior hole(s) not represented".
 
 ## Code & blocks editors
 - [ ] Run an AQUI script (params + shapes + transform + boolean op + for-loop + draw/turtle)
@@ -76,6 +89,12 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 - [ ] Drag a shape on the canvas → its mesh follows after the debounce
 - [ ] Bind depth to a parameter, scrub the slider → extrusion thickness updates live
 - [ ] Change z → the piece elevates off the table
+- [ ] Set tilt=90 on a panel → it stands upright in 3D (badge shows the tilt)
+- [ ] Change **Face plane** (Properties dropdown) xz/xy/yz → the piece's flat
+      face reorients in 3D (flat / front-vertical / side-vertical)
+- [ ] On a piece with female joinery, set **cutDepth** < depth → the slot
+      becomes a blind pocket (doesn't go all the way through) in 3D
+- [ ] Run examples/house.aqui → walls/roof fold up into a standing house
 - [ ] Edit joinery → teeth rebuild in 3D
 - [ ] Switch tabs → the 3D scene swaps to the new tab's shapes
 - [ ] 50-shape scene + slider scrub stays smooth (transform-only fast path)

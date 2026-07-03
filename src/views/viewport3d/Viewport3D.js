@@ -80,14 +80,23 @@ export class Viewport3D extends Component {
         }
         this._started = true;
 
-        const width = this.container.clientWidth || 1;
-        const height = this.container.clientHeight || 1;
+        // clientWidth/Height can be 0 the instant the panel unhides; fall back
+        // to the canvas-container size or a sane default so the renderer is
+        // never created at 0×0 (which renders nothing).
+        const width = this.container.clientWidth || this.container.parentElement?.clientWidth || 600;
+        const height = this.container.clientHeight || this.container.parentElement?.clientHeight || 600;
 
         const built = new Viewport3DScene().build({ width, height });
         this.scene = built.scene;
         this.camera = built.camera;
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        try {
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        } catch (err) {
+            this._started = false;
+            this.showError('WebGL is unavailable in this browser', err);
+            return;
+        }
         this.renderer.setPixelRatio(window.devicePixelRatio || 1);
         this.renderer.setSize(width, height);
         this.renderer.shadowMap.enabled = true;
@@ -101,8 +110,23 @@ export class Viewport3D extends Component {
         window.addEventListener('resize', this.onResize);
 
         this.subscribeToScene();
-        this.syncScene();
+        // Build pieces best-effort — a bad piece must not stop the render loop,
+        // so the table + valid pieces always show.
+        try {
+            this.syncScene();
+        } catch (err) {
+            console.error('Viewport3D: initial sync failed', err);
+        }
+        // Ensure the size is right after layout settled, then run the loop.
+        this.onResize();
         this.animate();
+    }
+
+    /** Surface a fatal 3D error in the panel instead of a blank blue box. */
+    showError(message, err) {
+        if (err) console.error('Viewport3D:', message, err);
+        this.container.innerHTML =
+            `<div style="padding:16px;color:#334155;font:13px sans-serif">3D view: ${message}.</div>`;
     }
 
     /** Subscribe to every event that can change what the 3D view should show. */
@@ -144,29 +168,36 @@ export class Viewport3D extends Component {
 
         for (const shape of resolved) {
             seen.add(shape.id);
-            const edges = store.getEdgesForShape(shape.id);
-            const geomKey = this.meshBuilder.geomKey(shape, edges, store);
-            const existing = this.pieces.get(shape.id);
+            // Per-piece guard: a single shape that fails to build (bad
+            // geometry, joinery edge case) is skipped and logged — it must not
+            // blank the whole 3D scene.
+            try {
+                const edges = store.getEdgesForShape(shape.id);
+                const geomKey = this.meshBuilder.geomKey(shape, edges, store);
+                const existing = this.pieces.get(shape.id);
 
-            if (existing && existing.geomKey === geomKey) {
-                // Fast path: geometry unchanged — only move/elevate/rotate.
-                this.meshBuilder.updateTransform(existing.mesh, shape);
-                this.placeInWorld(existing.mesh, shape);
-                continue;
-            }
+                if (existing && existing.geomKey === geomKey) {
+                    // Fast path: geometry unchanged — only move/elevate/rotate.
+                    this.meshBuilder.updateTransform(existing.mesh, shape);
+                    this.placeInWorld(existing.mesh, shape);
+                    continue;
+                }
 
-            // Rebuild this piece (new or geometry changed).
-            if (existing) {
-                this.scene.remove(existing.mesh);
-                this.meshBuilder.dispose(existing.mesh);
-                this.pieces.delete(shape.id);
+                // Rebuild this piece (new or geometry changed).
+                if (existing) {
+                    this.scene.remove(existing.mesh);
+                    this.meshBuilder.dispose(existing.mesh);
+                    this.pieces.delete(shape.id);
+                }
+                const built = this.meshBuilder.build(shape, { edges, joineryProvider: store });
+                if (!built) continue;
+                this.meshBuilder.updateTransform(built.mesh, shape);
+                this.placeInWorld(built.mesh, shape);
+                this.scene.add(built.mesh);
+                this.pieces.set(shape.id, built);
+            } catch (err) {
+                console.error(`Viewport3D: failed to build piece "${shape.id}"`, err);
             }
-            const built = this.meshBuilder.build(shape, { edges, joineryProvider: store });
-            if (!built) continue;
-            this.meshBuilder.updateTransform(built.mesh, shape);
-            this.placeInWorld(built.mesh, shape);
-            this.scene.add(built.mesh);
-            this.pieces.set(shape.id, built);
         }
 
         // Dispose pieces whose shapes are gone.

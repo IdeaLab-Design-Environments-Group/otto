@@ -315,8 +315,11 @@ export class AssemblyPieceFactory {
 
         const depth = Number(options.depth ?? this.thickness) || this.thickness;
         const z = Number(options.z ?? shape.z ?? 0) || 0;
+        const facePlane = options.facePlane ?? shape.facePlane ?? 'xz';
+        const cutDepth = Number(options.cutDepth ?? shape.cutDepth ?? 0) || 0;
 
-        const { geometry, width, height } = this.buildGeometry(shape, { ...options, depth });
+        const built = this.buildGeometry(shape, { ...options, depth, facePlane, cutDepth });
+        const { geometry, width, height, pocketTop } = built;
         if (!geometry) return null;
 
         const material = new THREE.MeshStandardMaterial({
@@ -335,12 +338,21 @@ export class AssemblyPieceFactory {
             height,
             depth,
             z,
+            facePlane,
             isPiece: true,
             lift: z + depth / 2
         };
 
         // Base sits at z; extrusion centered → mesh center at z + depth/2.
         mesh.position.y = z + depth / 2;
+
+        // Blind-pocket top layer (walls-with-holes above the solid floor).
+        if (pocketTop) {
+            const topMesh = new THREE.Mesh(pocketTop, material);
+            topMesh.castShadow = true;
+            topMesh.receiveShadow = true;
+            mesh.add(topMesh);
+        }
 
         this.addOutline(mesh, geometry);
 
@@ -351,47 +363,65 @@ export class AssemblyPieceFactory {
         };
     }
 
+    /**
+     * Orient an extruded geometry so its flat face lies in the chosen world
+     * plane. Extrusion runs along the perpendicular axis.
+     *   'xz' (default) — lie flat on the table (extrude → +Y)
+     *   'xy'           — stand vertical facing front (extrude → +Z)
+     *   'yz'           — stand vertical facing the side (extrude → +X)
+     * @private
+     */
+    orientGeometry(geometry, facePlane) {
+        if (facePlane === 'xy') return; // ExtrudeGeometry face is already in XY
+        if (facePlane === 'yz') { geometry.rotateY(Math.PI / 2); return; }
+        geometry.rotateX(-Math.PI / 2); // 'xz'
+    }
+
     buildGeometry(shape, options = {}) {
         const thickness = Number(options.depth ?? this.thickness) || this.thickness;
-        let skipFemaleHoles = false;
+        const facePlane = options.facePlane ?? 'xz';
+        const cutDepth = Number(options.cutDepth ?? 0) || 0;
+        const usePocket = cutDepth > 0 && cutDepth < thickness;
 
-        // Universal converter: use the shape's SVG path definition for all shapes
-        // Special handling for Donut: it uses winding-rule holes which THREE.js doesn't support directly
-        // So we'll use the existing donutShape method which creates explicit holes
+        // Special handling for Donut: winding-rule holes THREE.js can't do
+        // directly, so use the explicit-hole donutShape. (Pockets N/A here.)
         if (shape.type === 'donut') {
             const outerRadius = shape.outerRadius || 25;
             const innerRadius = shape.innerRadius || 12.5;
             const donutShape2d = this.donutShape(outerRadius, innerRadius);
-            
-            if (!skipFemaleHoles) {
-                this.addFemaleJoineryHoles(donutShape2d, shape, options);
-            }
-
-            const geometry = new THREE.ExtrudeGeometry(donutShape2d, {
-                depth: thickness,
-                bevelEnabled: false
-            });
-            geometry.rotateX(-Math.PI / 2);
+            this.addFemaleJoineryHoles(donutShape2d, shape, options);
+            const geometry = new THREE.ExtrudeGeometry(donutShape2d, { depth: thickness, bevelEnabled: false });
+            this.orientGeometry(geometry, facePlane);
             return { geometry, width: outerRadius * 2, height: outerRadius * 2 };
         }
 
-        // For all other shapes, use the universal converter
-        const { shape2d, width, height, center } = this.shapeToThreeShape(shape, options);
-
+        // Universal converter for every other shape.
+        const { shape2d, width, height } = this.shapeToThreeShape(shape, options);
         if (!shape2d) return { geometry: null, width, height };
 
-        // Add female joinery holes if needed
-        if (!skipFemaleHoles) {
-            this.addFemaleJoineryHoles(shape2d, shape, options);
+        this.addFemaleJoineryHoles(shape2d, shape, options);
+        const holePaths = Array.isArray(shape2d.holes) ? shape2d.holes.slice() : [];
+
+        // No pocket (through-cut, the default): single extrude with holes.
+        if (!usePocket || holePaths.length === 0) {
+            const geometry = new THREE.ExtrudeGeometry(shape2d, { depth: thickness, bevelEnabled: false });
+            this.orientGeometry(geometry, facePlane);
+            return { geometry, width, height };
         }
 
-        const geometry = new THREE.ExtrudeGeometry(shape2d, {
-            depth: thickness,
-            bevelEnabled: false
-        });
-        geometry.rotateX(-Math.PI / 2);
+        // Blind pocket (no CSG): stack a SOLID floor (outer, no holes,
+        // depth − cutDepth) with a WALL layer (outer + holes, cutDepth) on
+        // top. Both extrude along local +Z, then are oriented identically.
+        const floorShape = shape2d.clone();
+        floorShape.holes = [];
+        const floor = new THREE.ExtrudeGeometry(floorShape, { depth: thickness - cutDepth, bevelEnabled: false });
+        this.orientGeometry(floor, facePlane);
 
-        return { geometry, width, height };
+        const walls = new THREE.ExtrudeGeometry(shape2d, { depth: cutDepth, bevelEnabled: false });
+        walls.translate(0, 0, thickness - cutDepth); // sit on top of the floor
+        this.orientGeometry(walls, facePlane);
+
+        return { geometry: floor, pocketTop: walls, width, height };
     }
 
     rectShape(width, height) {
