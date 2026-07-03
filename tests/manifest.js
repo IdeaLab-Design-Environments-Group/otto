@@ -9,5 +9,6 @@ export const TEST_MODULES = [
     './unit/canvas-stack.test.js',
     './unit/commands.test.js',
     './unit/depth-z.test.js',
-    './unit/plugin-lifecycle.test.js'
+    './unit/plugin-lifecycle.test.js',
+    './unit/stl-import.test.js'
 ];

@@ -343,19 +343,40 @@ selection as part of their own `undo()`.
 
 ## 4. 2.5D: depth and z
 
-Otto is a 2.5D environment: each flat piece has a thickness and can float above
-the work plane. Two bindable common properties carry this through the whole
-stack:
+Otto is a 2.5D environment: each flat piece has a thickness, can float above
+the work plane, and can fold up to stand or slope. Three bindable common
+properties carry this through the whole stack:
 
 - **`depth`** — extrusion thickness in mm (default `3`, `min 0.5`);
-- **`z`** — elevation of the piece's base off the work plane in mm (default `0`).
+- **`z`** — elevation of the piece's centre off the work plane in mm (default `0`);
+- **`tilt`** — fold the piece up out of the table plane in degrees (default `0`
+  flat, `90` upright). With yaw (the ordinary 2D `rotation`, applied first via
+  Euler order `YXZ`), this lets flat panels become walls and sloped roofs — a
+  wall of height `H` stands on the floor at `tilt: 90, z: H/2`. `tilt` is an
+  assembly instruction only; the 2D cut part stays flat, so the canvas still
+  draws the piece flat and shows the tilt in its selection badge.
+- **`facePlane`** — an enum (`xz` flat/default · `xy` front-vertical · `yz`
+  side-vertical) choosing which world plane the piece's flat face lies in; the
+  extrusion runs perpendicular. A quick base orientation that composes with
+  `tilt`/yaw/`z`. Non-bindable, rendered as a dropdown in the Properties panel.
+- **`cutDepth`** — how deep the piece's cut/difference features go through the
+  material in 3D (`0` = through, the default; `< depth` = a blind pocket that
+  deep). `MeshBuilder` renders a pocket as a no-CSG two-layer stack: a solid
+  floor (`depth − cutDepth`) plus a walls-with-holes top layer (`cutDepth`).
+  Today this applies to female-joinery holes; boolean-`difference` holes need
+  multi-contour PathShape support (a documented follow-up) before they cut.
+  `facePlane`/`cutDepth` are part of the mesh `geomKey`, so changing them
+  rebuilds that piece's geometry (unlike `tilt`/`z`, which are transform-only).
 
-Both are ordinary bindable schema properties, so they flow *automatically*
+All three are ordinary bindable schema properties, so they flow *automatically*
 through: Properties Panel rows, serialization, the Blockly generic-property
-blocks, AQUI's `depth:` / `z:` params, and the 3D viewport.
+blocks, AQUI's `depth:` / `z:` / `tilt:` params, and the 3D viewport. In the
+viewport, `tilt`/`z`/`rotation` take the transform-only fast path (excluded
+from the geometry key — no rebuild). See `examples/house.aqui` for a worked
+standing-house assembly.
 
-**AQUI integration required no lexer/parser change** — `depth:` and `z:` are
-just parameter names travelling the existing generic param path into shape
+**AQUI integration required no lexer/parser change** — `depth:`, `z:`, `tilt:`
+are just parameter names travelling the existing generic param path into shape
 options, where the schema picks them up like any other dimension.
 
 **2D rendering** paints z-sorted low-`z`-first (`ShapeStore.getResolvedSorted`)
@@ -372,6 +393,34 @@ except the `version` field** — and the 1.0.0 → 2.0.0 migration is a pure ver
 stamp (the schema supplies the defaults on load; pre-2.0.0 per-shape
 `thickness` fields are geometry, e.g. a Cross arm width, and are left
 untouched). This byte-stability is guarded by fixtures (section 10).
+
+**STL import (2.5D bridge):** `persistence/StlImporter.js` parses ASCII **and**
+binary STL (binary detected by the exact-size rule, not the leading `solid`
+text), then flattens the mesh to a **silhouette outline** on a viewing plane
+(`xy` top / `xz` front / `yz` side — front/side flip Z so peaks point up), with
+the extent along the perpendicular axis carried in as the piece's `depth`.
+
+Two outline methods: `footprint()` = the fast **convex hull** (used for view
+selection + as a fallback), and `silhouette()` = the **true, concave-aware
+outline** used for the actual import. The silhouette is dependency-free and
+robust for any triangle soup (concave parts, separate islands, overlapping
+triangles): project → rasterize triangles into a boolean grid → trace the
+filled/empty boundary into closed loops → map back to mm → Douglas–Peucker
+simplify (so slanted edges are lines, not staircases). The largest loop is the
+outline; interior loops are reported as holes (a PathShape is a single contour,
+so holes are noted, not represented). `bestPlane()` auto-picks the most
+distinctive view (a house imports as its gabled front, not a square); the
+import prompt lets the user override the view and set the (unit-less) scale.
+`Application.importSTL()` adds that as a closed `PathShape` via
+`AddShapeCommand` (undoable), bounding-box-centred on the viewport and then
+framed with a fit-to-view — so a 3D model becomes a normal parametric Otto
+piece that extrudes back to roughly its original bounding block. Because STL is
+**unit-less** (mm, cm, inch, and m files can produce identical numbers, so no
+magnitude heuristic can tell them apart), import always confirms a **scale
+factor** (`footprint(parsed, scale)` multiplies points + depth uniformly),
+pre-filled with `1` for a sane size or a fit-to-work-area suggestion for an
+extreme one. The parser, hull, footprint scaling, and scale suggestion are
+pure/DOM-free and unit-tested.
 
 ---
 

@@ -44,7 +44,9 @@ export class MeshBuilder {
             edges,
             joineryProvider,
             depth,
-            z
+            z,
+            facePlane: resolvedShape.facePlane ?? 'xz',
+            cutDepth: Number(resolvedShape.cutDepth ?? 0) || 0
         });
         if (!piece) return null;
 
@@ -67,11 +69,14 @@ export class MeshBuilder {
      */
     geomKey(shape, edges = [], joineryProvider = null) {
         // Geometry props = all schema props except the pure-transform ones
-        // (rotation and z), captured from the resolved shape's toJSON.
+        // (rotation, z, tilt), captured from the resolved shape's toJSON.
+        // Those only move the existing mesh, so changing them takes the
+        // transform-only fast path instead of a geometry rebuild.
         const json = shape.toJSON();
         delete json.bindings;
         delete json.rotation;
         delete json.z;
+        delete json.tilt;
         delete json.position;
 
         let joineryKey = '';
@@ -97,12 +102,29 @@ export class MeshBuilder {
     updateTransform(mesh, resolvedShape) {
         const depth = Number(mesh.userData.depth ?? resolvedShape.depth ?? 3) || 3;
         const z = Number(resolvedShape.z ?? 0) || 0;
-        mesh.position.y = z + depth / 2;
+
+        // How tall the piece stands depends on its face plane: laid flat (xz)
+        // its vertical size is the material `depth`; stood upright (xy/yz) it's
+        // the piece's own height. Centre it at z + half that, so its base sits
+        // on the table at elevation z regardless of orientation.
+        const facePlane = mesh.userData.facePlane || resolvedShape.facePlane || 'xz';
+        const height = Number(mesh.userData.height ?? 0) || depth;
+        const verticalExtent = facePlane === 'xz' ? depth : height;
+        mesh.position.y = z + verticalExtent / 2;
         mesh.userData.z = z;
-        mesh.userData.lift = z + depth / 2;
-        // Rotation about the vertical axis mirrors the 2D canvas rotation.
+        mesh.userData.lift = z + verticalExtent / 2;
+
+        // Orient the piece in 3D:
+        //  - yaw  (rotation.y)  = the 2D canvas rotation, about the vertical axis
+        //  - tilt (rotation.x)  = fold up out of the table plane (0 flat, 90 upright)
+        // Both pivot about the piece center, so a wall of height H sits on the
+        // floor when tilt = 90 and z ≈ H / 2. Euler order YXZ applies yaw first,
+        // so tilt folds about the wall's (yawed) length axis.
         const rot = Number(resolvedShape.rotation || 0);
+        const tilt = Number(resolvedShape.tilt || 0);
+        mesh.rotation.order = 'YXZ';
         mesh.rotation.y = -(rot * Math.PI) / 180;
+        mesh.rotation.x = -(tilt * Math.PI) / 180;
     }
 
     /** Dispose a mesh's geometry/material and any child outline. */

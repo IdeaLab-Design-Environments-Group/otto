@@ -496,10 +496,14 @@ SHAPES
          chamferrectangle
 
 2.5D (every shape)
-  depth: <mm>   extrusion thickness (default 3)
-  z: <mm>       elevation off the work plane (default 0)
+  depth: <mm>       extrusion thickness (default 3)
+  z: <mm>           elevation off the work plane (default 0)
+  tilt: <deg>       fold up in 3D: 0 flat, 90 upright (walls/roofs)
+  facePlane: "xz"   flat face plane: "xz" flat · "xy" front · "yz" side
+  cutDepth: <mm>    depth of cut/pocket features (0 = through, default)
   e.g.  shape circle c1 { radius: 30 depth: 6 z: 10 }
-  Both accept parameters:  depth: t
+  To stand a wall H tall on the floor: tilt: 90  z: H/2
+  depth/z/tilt/cutDepth accept parameters; facePlane is a quoted string
 
 TRANSFORMS
   transform shapeName {
