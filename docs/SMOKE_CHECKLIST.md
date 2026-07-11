@@ -38,6 +38,7 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 
 ## Viewport
 - [ ] Mouse wheel zooms around the cursor; right-drag pans
+- [ ] Touch: one-finger drag pans; two-finger pinch zooms around the midpoint
 - [ ] Zoom controls (+/−/reset) work; rulers and grid stay aligned in mm
 
 ## Parameters & bindings
@@ -79,28 +80,6 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 ## Undo/redo (global)
 - [ ] Undo/redo across a mixed session (create → move → bind → param change →
       code run → delete) behaves predictably at every step
-
-## 3D view (embedded, live)
-- [ ] Click the "3D" toolbar button — the panel opens beside the canvas and
-      every shape appears extruded (canvas refits to the narrower space)
-- [ ] Joinery: male tabs and female holes visible on jointed edges
-- [ ] Orbit (drag) works; clicking a 3D piece selects the shape (panel updates)
-- [ ] Selecting a shape on the canvas highlights its 3D piece
-- [ ] Drag a shape on the canvas → its mesh follows after the debounce
-- [ ] Bind depth to a parameter, scrub the slider → extrusion thickness updates live
-- [ ] Change z → the piece elevates off the table
-- [ ] Set tilt=90 on a panel → it stands upright in 3D (badge shows the tilt)
-- [ ] Change **Face plane** (Properties dropdown) xz/xy/yz → the piece's flat
-      face reorients in 3D (flat / front-vertical / side-vertical)
-- [ ] On a piece with female joinery, set **cutDepth** < depth → the slot
-      becomes a blind pocket (doesn't go all the way through) in 3D
-- [ ] Run examples/house.aqui → walls/roof fold up into a standing house
-- [ ] Edit joinery → teeth rebuild in 3D
-- [ ] Switch tabs → the 3D scene swaps to the new tab's shapes
-- [ ] 50-shape scene + slider scrub stays smooth (transform-only fast path)
-- [ ] Donut still renders with its hole
-- [ ] Toggle "3D" off → panel hides, canvas expands, render loop stops
-- [ ] Old bookmark to assemble.html redirects to the editor
 
 ## Accessibility (post-Phase 7)
 - [ ] Complete the core flow keyboard-only (no mouse)

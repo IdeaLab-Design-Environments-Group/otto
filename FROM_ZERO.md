@@ -6,14 +6,13 @@
 > been dissolved into a `CanvasView` + render passes + input controllers;
 > shapes are **schema-driven** (`static SCHEMA`) rather than hand-written
 > constructors; undo is a **per-tab command history** (not memento
-> snapshots); shapes carry bindable **`depth`/`z`** (2.5D) and the 3D view is
-> an **embedded live panel** (not a separate `assemble.html` page). For the
+> snapshots); and shapes carry bindable **`depth`/`z`** (2.5D). For the
 > current architecture, read **`src/ARCHITECTURE.md`** — it is the source of
 > truth where it disagrees with this guide.
 
 This is a **build-from-scratch handbook** for re-implementing Otto v2 end-to-end. It is intentionally written like a FabAcademy documentation page: clear goals, repeatable steps, verification checklists, and “what went wrong / how I fixed it” notes.
 
-If you only want to *use* Otto, start at **Quickstart (run the app)**.  
+If you only want to *use* Otto, start at **Quickstart (run the app)**.
 If you want to *rebuild* Otto, follow the **Milestones** in order.
 
 **Authoritative references in this repo**
@@ -36,7 +35,6 @@ Otto is a parametric 2D design system running entirely in the browser:
 - **Multi-tab scenes** (each tab has its own independent scene state).
 - **Edge selection + joinery metadata** (for fabrication workflows): Select individual edges of shapes and attach joinery metadata (finger joints, dovetails, etc.) for CNC/fabrication workflows.
 - **Programming language**: Code editor runner + interpreter (and blocks editor sync) for generating parameters and shapes programmatically.
-- **3D assembly view**: Extrude 2D parts into 3D meshes (Three.js) with perfect SVG-to-3D transfer, preserving smooth curves and exact geometry.
 - **Plugin system**: Load and activate plugins that register new shapes, bindings, and commands to extend the system.
 
 ---
@@ -92,7 +90,6 @@ npx --yes serve .
 Then open:
 
 - Editor: `http://localhost:5173/index.html`
-- Assembly view: `http://localhost:5173/assemble.html`
 - Geometry tests: `http://localhost:5173/src/geometry/tests/run-tests.html`
 - Shape integration tests: `http://localhost:5173/src/models/shapes/tests/run-tests.html`
 
@@ -145,8 +142,7 @@ Build in this order. Don’t skip verification.
 10. **M9**: Multi-tab scenes (TabManager + TabBar) and scene switching
 11. **M10**: Edge selection + joinery metadata + joinery UI (fabrication workflows)
 12. **M11**: Programming language (Lexer/Parser/Interpreter + CodeRunner) + CodeEditor/BlocksEditor sync
-13. **M12**: 3D assembly view (Three.js extrude + layout + drag/orbit with universal SVG-to-3D converter)
-14. **M13**: Plugins (PluginManager + PluginAPI) + example plugin
+13. **M12**: Plugins (PluginManager + PluginAPI) + example plugin
 
 ---
 
@@ -621,7 +617,6 @@ Enable fabrication workflows by allowing users to select individual edges of sha
 
 Without edge joinery, Otto is just a drawing tool. With joinery, it becomes a fabrication design system where:
 - Users can design parts that physically connect
-- The 3D assembly view can show how parts fit together
 - Export formats can include joinery information for CAM software
 - The system supports real-world manufacturing workflows
 
@@ -683,12 +678,10 @@ Without edge joinery, Otto is just a drawing tool. With joinery, it becomes a fa
 - Right-click or use menu to assign joinery type
 - Configure joinery parameters (finger count, thickness)
 - Save scene and reload: joinery data persists
-- Switch to assembly view: joinery appears in 3D (male tabs, female holes)
 
 ### Troubleshooting
 
 - **Edges not detecting**: Check edge hit test threshold (may be too small)
-- **Joinery not showing in 3D**: Verify `AssemblyPieceFactory` reads joinery metadata
 - **Selection mode not switching**: Check `ShapeStore.selectionMode` is being updated
 
 ---
@@ -828,135 +821,7 @@ This is **not** a hardened sandbox. The interpreter runs in the same context as 
 
 ---
 
-## M12 — 3D Assembly view (fabrication visualization)
-
-### Goal
-
-Extrude 2D shapes into 3D meshes and lay them out on a plane for visualization and fabrication planning. **Perfect transfer** from 2D SVG definitions to 3D extrusions, preserving exact geometry including smooth curves.
-
-### Why This Is Required
-
-The 3D assembly view is essential for:
-- **Visualization**: See how 2D parts will look as 3D objects
-- **Fabrication planning**: Understand part relationships before cutting
-- **Joinery verification**: See how parts with joinery fit together
-- **Layout optimization**: Arrange parts efficiently on material sheets
-- **Export preparation**: Verify geometry before sending to CAM software
-- **Design validation**: Catch design issues before fabrication
-
-### Deliverables
-
-- `assemble.html`: Standalone page with Three.js importmap
-  - Imports Three.js via ES modules
-  - Initializes AssemblyApp
-  - Provides canvas for 3D rendering
-- `src/assembly/`:
-  - `AssemblyDataLoader.js`: Loads autosave JSON from localStorage
-    - Reads `nova_otto_autosave` key
-    - Extracts active tab's scene data
-    - Normalizes shape data (adds defaults for missing properties)
-    - Returns scene state for assembly
-  - `AssemblyPieceFactory.js`: Core factory for 3D mesh creation
-    - **Universal converter** (`shapeToThreeShape()`):
-      - Uses each shape's `toGeometryPath()` to get exact SVG path definition
-      - Extracts geometry path anchors with Bezier handles (handleIn/handleOut as Vec objects)
-      - Converts anchors to THREE.js Shape commands:
-        - If handles are non-zero → `bezierCurveTo(cp1, cp2, end)` for smooth curves
-        - Otherwise → `lineTo(end)` for straight segments
-      - Automatically centers shapes based on bounding box for proper 3D positioning
-      - Closes open paths for extrusion (required for 3D)
-      - Returns THREE.js Shape ready for extrusion
-    - `buildGeometry()`: Extrudes shapes with thickness
-      - Creates THREE.ExtrudeGeometry from THREE.js Shape
-      - Applies thickness (default 3mm)
-      - Rotates geometry for proper orientation (X-axis rotation)
-      - Handles special cases (rectangles with joinery, donut holes)
-    - `createPiece()`: Creates complete 3D mesh
-      - Builds geometry
-      - Creates material (wood-like color, roughness, metalness)
-      - Adds outline edges for visual clarity
-      - Sets up shadow casting/receiving
-  - `AssemblyScene.js` / `AssemblySceneBuilder.js`: Builds Three.js scene
-    - Creates scene, camera, lights (ambient + directional)
-    - Creates desktop plane with wood texture
-    - Sets up shadows
-    - Returns configured scene for rendering
-  - `AssemblyLayout.js`: Positions pieces on plane
-    - `GridLayoutStrategy`: Lays out pieces in grid with spacing
-    - Centers layout around origin
-    - Prevents overlaps
-    - Returns positioned meshes
-  - `AssemblyInteraction.js`: User interaction
-    - `OrbitControls`: Camera orbit/pan/zoom
-    - `DragControls`: Drag pieces on plane
-    - Constrains dragging to plane surface
-  - `AssemblyJoinery.js`: Joinery visualization
-    - Reads joinery metadata from shapes
-    - Creates male tabs as separate meshes
-    - Creates female holes in extruded geometry
-    - Visualizes joinery relationships
-  - `main.js`: Entry point for assembly app
-    - Initializes AssemblyApp
-    - Sets up render loop
-    - Handles window resize
-
-### Key Implementation Details
-
-**Universal SVG-to-3D Conversion Process:**
-1. **Get geometry path**: `const geoPath = shape.toGeometryPath()`
-   - Every shape implements this method
-   - Returns geometry library Path object with anchors
-2. **Extract anchors**: `geoPath.anchors` array
-   - Each anchor has `position` (Vec), `handleIn` (Vec), `handleOut` (Vec)
-   - Handles are relative to position (Vec objects with .x and .y)
-3. **Calculate bounding box**: Get bounds to center shape
-   - `geoPath.tightBoundingBox()` or `geoPath.looseBoundingBox()`
-   - Calculate center: `(min + max) / 2`
-4. **Convert to THREE.js Shape**:
-   - Start: `shape2d.moveTo(firstAnchor.position - center)`
-   - For each segment:
-     - Check if handles are non-zero
-     - If yes: `bezierCurveTo(cp1, cp2, end)` where:
-       - `cp1 = anchor1.position + anchor1.handleOut - center`
-       - `cp2 = anchor2.position + anchor2.handleIn - center`
-       - `end = anchor2.position - center`
-     - If no: `lineTo(anchor2.position - center)`
-5. **Close path**: If closed or needs closing for extrusion
-   - Add final segment back to first anchor
-   - Call `shape2d.closePath()`
-6. **Extrude**: `new THREE.ExtrudeGeometry(shape2d, { depth: thickness })`
-   - Rotate: `geometry.rotateX(-Math.PI / 2)` for proper orientation
-
-**Special Cases:**
-- **Rectangles with joinery**: Custom edge notches (bypasses universal converter)
-  - Uses `rectShapeWithJoinery()` to create notched edges
-  - Handles finger joints, dovetails, etc.
-- **Donut shapes**: Explicit holes (THREE.js doesn't support winding-rule holes)
-  - Uses `donutShape()` to create outer circle with inner hole
-  - THREE.js requires explicit Path holes, not winding-rule
-
-**Joinery Integration:**
-- Female holes: Created in extruded geometry via `addFemaleJoineryHoles()`
-- Male tabs: Created as separate meshes via `AssemblyJoineryDecorator`
-- Edge metadata: Read from `ShapeStore.edgeJoinery` map
-
-### Verification
-
-- Create shapes in editor (including paths with Bezier curves)
-- Add joinery to edges (finger joints, etc.)
-- Open assembly page (`assemble.html`)
-- See extruded pieces with **smooth curves preserved**
-- Verify joinery appears correctly (male tabs, female holes)
-- Drag pieces around on the plane
-- Orbit camera to view from different angles
-- Verify complex paths (gears, spirals, custom paths) extrude correctly
-- Check that all shape types work (circle, rectangle, polygon, path, etc.)
-- Verify thickness is applied correctly (default 3mm)
-- Test with multiple pieces: layout should be organized
-
----
-
-## M13 — Plugins (extensibility system)
+## M12 — Plugins (extensibility system)
 
 ### Goal
 
@@ -1023,11 +888,11 @@ export class TriangleShapePlugin extends Plugin {
 
   activate(api) {
     // Register shape
-    api.registerShape('triangle', 
+    api.registerShape('triangle',
       (id, position, base, height) => new Triangle(id, position, base, height),
       (json) => Triangle.fromJSON(json)
     );
-    
+
     // Subscribe to events
     api.subscribe('shape:created', (shape) => {
       if (shape.type === 'triangle') {
@@ -1191,11 +1056,7 @@ There is no Jest/Vitest runner. Tests are written as ES module files and execute
 - [ ] Tabs create/switch/close correctly (last tab cannot close)
 - [ ] Edge selection + joinery persists across save/load
 - [ ] Code runner creates shapes/params programmatically
-- [ ] Assembly view extrudes shapes with smooth curves preserved (universal SVG-to-3D converter)
 - [ ] Plugins can register new shapes/bindings/commands
-- [ ] All shape types work in assembly view (circle, rectangle, polygon, path with curves, etc.)
-- [ ] Joinery appears correctly in 3D (male tabs, female holes)
 - [ ] Programming language supports loops, conditionals, and functions
 - [ ] Code editor and blocks editor sync bidirectionally
 - [ ] Plugin system loads and activates plugins without errors
-

@@ -25,6 +25,9 @@ export class PropertiesPanel extends Component {
         this.selectedShapeIds = new Set(); // Multi-selection
         this.bindingResolver = shapeStore.bindingResolver;
         this.selectedEdges = []; // Edge selection
+        // Tracks which "shapeId:property" cells have their parameter/formula
+        // binding controls revealed (literal fields stay compact by default).
+        this.expandedBindings = new Set();
 
         // Subscribe to shape selection events (only once in constructor)
         this.subscribe(EVENTS.SHAPE_SELECTED, (payload) => {
@@ -416,48 +419,87 @@ export class PropertiesPanel extends Component {
         }, shape.id));
         this.container.appendChild(idDiv);
 
-        // Bindable properties
-        const bindableProps = shape.getBindableProperties();
-        bindableProps.forEach(property => {
-            const propItem = this.createElement('div', {
-                class: 'property-item'
-            });
+        // Bindable properties laid out in a compact two-column grid. Each cell
+        // shows just the value; the parameter/formula controls stay hidden
+        // behind a per-field ƒx toggle so the panel fits without scrolling.
+        const grid = this.createElement('div', { class: 'properties-grid' });
 
-            const label = this.createElement('label', {}, `${property}:`);
-            propItem.appendChild(label);
-
-            const binding = shape.getBinding(property);
-            // Get current property value - resolve binding if present, otherwise use shape property
-            let currentValue = shape[property];
-            if (binding && binding.type === 'literal') {
-                currentValue = binding.value;
-            } else if (binding && this.bindingResolver) {
-                // For parameter/expression bindings, try to resolve it
-                try {
-                    const resolvedShape = this.bindingResolver.resolveShape(shape);
-                    currentValue = resolvedShape[property];
-                } catch (e) {
-                    // If resolution fails, use property value
-                    currentValue = shape[property];
-                }
-            }
-            const bindingEditor = this.renderBindingEditor(property, binding, currentValue, shape);
-            propItem.appendChild(bindingEditor);
-
-            this.container.appendChild(propItem);
+        shape.getBindableProperties().forEach(property => {
+            grid.appendChild(this.createPropertyCell(shape, property));
         });
 
-        // Enum properties (e.g. facePlane) — rendered as a dropdown, since
+        // Enum properties (e.g. facePlane) — a full-width dropdown cell, since
         // they are not numeric/bindable.
         const schema = shape.constructor.fullSchema ?? {};
         for (const [prop, desc] of Object.entries(schema)) {
             if (desc.type !== 'enum') continue;
-            this.container.appendChild(this.renderEnumProperty(shape, prop, desc));
+            grid.appendChild(this.renderEnumProperty(shape, prop, desc));
         }
+
+        this.container.appendChild(grid);
     }
 
     /**
-     * Render a labelled dropdown for an enum schema property, dispatching a
+     * Build one grid cell for a bindable property. A literal value renders as a
+     * single compact input; a parameter/formula binding (or a cell the user has
+     * expanded via ƒx) renders full-width with the binding editor.
+     * @param {Shape} shape
+     * @param {string} property
+     * @returns {HTMLElement}
+     */
+    createPropertyCell(shape, property) {
+        const binding = shape.getBinding(property);
+        const isBound = !!binding && binding.type !== 'literal';
+        const key = `${shape.id}:${property}`;
+        const expanded = isBound || this.expandedBindings.has(key);
+
+        const cell = this.createElement('div', {
+            class: `prop-cell${expanded ? ' prop-cell-wide' : ''}`
+        });
+
+        // Header: property name + ƒx toggle for the binding controls.
+        const head = this.createElement('div', { class: 'prop-cell-head' });
+        head.appendChild(this.createElement('label', {}, property));
+
+        const fx = this.createElement('button', {
+            class: `prop-fx-btn${expanded ? ' prop-fx-btn-active' : ''}`,
+            type: 'button',
+            title: expanded ? 'Hide binding options' : 'Bind to a parameter or formula'
+        }, 'ƒx');
+        fx.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (this.expandedBindings.has(key)) {
+                this.expandedBindings.delete(key);
+            } else {
+                this.expandedBindings.add(key);
+            }
+            this.render();
+        });
+        head.appendChild(fx);
+        cell.appendChild(head);
+
+        if (expanded) {
+            // Resolve the current value for display in the binding editor.
+            let currentValue = shape[property];
+            if (binding && binding.type === 'literal') {
+                currentValue = binding.value;
+            } else if (binding && this.bindingResolver) {
+                try {
+                    currentValue = this.bindingResolver.resolveShape(shape)[property];
+                } catch (e) {
+                    currentValue = shape[property];
+                }
+            }
+            cell.appendChild(this.renderBindingEditor(property, binding, currentValue, shape));
+        } else {
+            cell.appendChild(this.renderLiteralInput(property, shape[property], shape));
+        }
+
+        return cell;
+    }
+
+    /**
+     * Render a labelled dropdown cell for an enum schema property, dispatching a
      * SetShapePropertyCommand on change (falls back to a direct write).
      * @param {Shape} shape
      * @param {string} property
@@ -465,8 +507,10 @@ export class PropertiesPanel extends Component {
      * @returns {HTMLElement}
      */
     renderEnumProperty(shape, property, desc) {
-        const item = this.createElement('div', { class: 'property-item' });
-        item.appendChild(this.createElement('label', {}, `${desc.label || property}:`));
+        const cell = this.createElement('div', { class: 'prop-cell prop-cell-wide' });
+        const head = this.createElement('div', { class: 'prop-cell-head' });
+        head.appendChild(this.createElement('label', {}, desc.label || property));
+        cell.appendChild(head);
 
         const select = this.createElement('select', { class: 'binding-input' });
         (desc.options || []).forEach(opt => {
@@ -484,8 +528,23 @@ export class PropertiesPanel extends Component {
                 EventBus.emit(EVENTS.PARAM_CHANGED, { shapeId: shape.id, property });
             }
         });
-        item.appendChild(select);
-        return item;
+        cell.appendChild(select);
+        return cell;
+    }
+
+    /**
+     * Format a numeric value for display: integers stay exact, long decimals are
+     * rounded to two places so dragged coordinates don't read as noise. The exact
+     * stored value is preserved unless the user actually edits the field.
+     * @param {number} value
+     * @returns {string}
+     */
+    formatNumber(value) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            return String(value ?? 0);
+        }
+        if (Number.isInteger(value)) return String(value);
+        return String(Math.round(value * 100) / 100);
     }
 
     /**
@@ -603,16 +662,21 @@ export class PropertiesPanel extends Component {
             }
         }
 
+        // Show a rounded value so dragged floats stay readable; keep the
+        // formatted string so an untouched field never overwrites the exact value.
+        const display = this.formatNumber(currentValue);
         const input = this.createElement('input', {
             type: 'number',
             class: 'binding-input binding-literal',
-            value: currentValue || 0,
+            value: display,
             step: 'any'
         });
 
         // Only update on blur or Enter key to allow multi-digit typing
         const updateValue = () => {
             if (!targetShape) return;
+            // Untouched field: preserve the exact underlying value.
+            if (input.value === display) return;
             const newValue = parseFloat(input.value);
             if (!isNaN(newValue)) {
                 // Route through the undoable binding command (which also

@@ -331,15 +331,15 @@ export class PluginAPI {
      * @param {Function} handler - Hook handler function
      * @returns {Function} Remove hook function
      *
-     * Available hooks:
-     * - 'before-render': Called before each render
-     * - 'after-render': Called after each render
-     * - 'before-save': Called before scene save
-     * - 'after-save': Called after scene save
-     * - 'before-load': Called before scene load
-     * - 'after-load': Called after scene load
-     * - 'shape-created': Called when a shape is created
-     * - 'shape-deleted': Called when a shape is deleted
+     * Hooks are a lightweight lifecycle channel separate from the EventBus.
+     * The hooks the host application actually fires (see Application.js):
+     * - 'app:init':     Fired once after plugins load, during app init.
+     * - 'scene:loaded': Fired on scene load AND on tab switch.
+     * - 'before-save':  Fired before a scene save.
+     * - 'after-save':   Fired after a scene save (data includes { success }).
+     *
+     * Plugins may also define and executeHook() their own custom hook names;
+     * only the four above are driven by the host.
      */
     addHook(hookName, handler) {
         if (!this._hooks.has(hookName)) {

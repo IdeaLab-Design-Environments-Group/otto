@@ -1,9 +1,10 @@
 /**
- * @fileoverview CanvasInputController — the controller for every mouse-driven
+ * @fileoverview CanvasInputController — the controller for pointer-driven
  * canvas interaction: selection (click / shift-click / rubber-band), shape
  * dragging (single + multi), corner resize, rotation, right-drag panning,
- * wheel zoom, edge hover/selection, joinery menu + joinery depth handles,
- * path free-drawing with bezier curves, and post-creation handle editing.
+ * wheel/pinch zoom, one-finger canvas panning, edge hover/selection, joinery
+ * menu + joinery depth handles, path free-drawing with bezier curves, and
+ * post-creation handle editing.
  *
  * Ported from the input half of the old 3526-line CanvasRenderer. The
  * controller WRITES InteractionState (which the render passes read), calls
@@ -51,6 +52,11 @@ export class CanvasInputController {
             getShapeStore: () => this.context.shapeStore
         });
 
+        /** Active touch pointers in canvas-relative CSS pixels. */
+        this.touchPoints = new Map();
+        /** Current touch gesture baseline (one-finger pan or two-finger pinch). */
+        this.touchGesture = null;
+
         this.attach();
     }
 
@@ -61,7 +67,11 @@ export class CanvasInputController {
         canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
         canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
         canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
-        canvas.addEventListener('wheel', (e) => this.onWheel(e));
+        canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+        canvas.addEventListener('pointerdown', (e) => this.onTouchPointerDown(e));
+        canvas.addEventListener('pointermove', (e) => this.onTouchPointerMove(e));
+        canvas.addEventListener('pointerup', (e) => this.onTouchPointerUp(e));
+        canvas.addEventListener('pointercancel', (e) => this.onTouchPointerUp(e));
         canvas.addEventListener('mouseleave', () => {
             if (this.interaction.isDragging) {
                 this.onMouseUp(new MouseEvent('mouseup'));
@@ -120,6 +130,94 @@ export class CanvasInputController {
     eventPoint(e) {
         const rect = this.view.canvas.getBoundingClientRect();
         return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Touch navigation
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Return midpoint + distance for the first two active touch points. */
+    touchMetrics() {
+        const points = Array.from(this.touchPoints.values());
+        if (points.length === 0) return null;
+        if (points.length === 1) {
+            return { center: points[0], distance: 0 };
+        }
+        const [a, b] = points;
+        return {
+            center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+            distance: Math.hypot(b.x - a.x, b.y - a.y)
+        };
+    }
+
+    /** Start or re-baseline a one-finger pan / two-finger pinch gesture. */
+    resetTouchGesture() {
+        const metrics = this.touchMetrics();
+        if (!metrics) {
+            this.touchGesture = null;
+            return;
+        }
+        this.touchGesture = {
+            mode: this.touchPoints.size >= 2 ? 'pinch' : 'pan',
+            lastCenter: { ...metrics.center },
+            lastDistance: metrics.distance
+        };
+    }
+
+    onTouchPointerDown(e) {
+        if (e.pointerType !== 'touch') return;
+        e.preventDefault();
+        this.view.canvas.setPointerCapture?.(e.pointerId);
+        this.touchPoints.set(e.pointerId, this.eventPoint(e));
+        this.resetTouchGesture();
+        this.view.canvas.style.cursor = 'grabbing';
+    }
+
+    onTouchPointerMove(e) {
+        if (e.pointerType !== 'touch' || !this.touchPoints.has(e.pointerId)) return;
+        e.preventDefault();
+        this.touchPoints.set(e.pointerId, this.eventPoint(e));
+        const metrics = this.touchMetrics();
+        const gesture = this.touchGesture;
+        if (!metrics || !gesture) {
+            this.resetTouchGesture();
+            return;
+        }
+
+        if (this.touchPoints.size === 1 && gesture.mode === 'pan') {
+            this.vc.pan(
+                metrics.center.x - gesture.lastCenter.x,
+                metrics.center.y - gesture.lastCenter.y
+            );
+        } else if (this.touchPoints.size >= 2 && gesture.mode === 'pinch') {
+            // Moving the midpoint pans naturally; changing finger separation
+            // zooms around that midpoint so the content stays under the hand.
+            this.vc.pan(
+                metrics.center.x - gesture.lastCenter.x,
+                metrics.center.y - gesture.lastCenter.y
+            );
+            if (gesture.lastDistance > 0 && metrics.distance > 0) {
+                const factor = Math.max(0.5, Math.min(2, metrics.distance / gesture.lastDistance));
+                this.vc.zoom(factor, metrics.center.x, metrics.center.y);
+            }
+        } else {
+            // Pointer count changed between events; establish a fresh baseline
+            // to avoid a jump when a second finger lands or lifts.
+            this.resetTouchGesture();
+            return;
+        }
+
+        this.touchGesture.lastCenter = { ...metrics.center };
+        this.touchGesture.lastDistance = metrics.distance;
+    }
+
+    onTouchPointerUp(e) {
+        if (e.pointerType !== 'touch') return;
+        e.preventDefault();
+        this.touchPoints.delete(e.pointerId);
+        try { this.view.canvas.releasePointerCapture?.(e.pointerId); } catch (_) { /* already released */ }
+        this.resetTouchGesture();
+        if (this.touchPoints.size === 0) this.view.canvas.style.cursor = 'crosshair';
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1177,7 +1275,11 @@ export class CanvasInputController {
     onWheel(e) {
         e.preventDefault();
         const { x, y } = this.eventPoint(e);
-        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        // Trackpad pinches arrive as small ctrl+wheel deltas, while mouse
+        // wheels use much larger steps. Exponential scaling keeps both smooth
+        // and preserves direction without making trackpad pinch over-sensitive.
+        const sensitivity = e.ctrlKey ? 0.01 : 0.002;
+        const factor = Math.max(0.8, Math.min(1.25, Math.exp(-e.deltaY * sensitivity)));
         this.vc.zoom(factor, x, y);
     }
 

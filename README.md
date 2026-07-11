@@ -9,7 +9,7 @@
 </p>
 <p align="center">
   <a href="https://github.com/HisarCS/Aqui/tree/main/Docs">Documentation</a> •
-  <a href="https://github.com/HisarCS/Aqui/blob/main/LICENSE">License</a> 
+  <a href="https://github.com/HisarCS/Aqui/blob/main/LICENSE">License</a>
 </p>
 
 
@@ -35,9 +35,8 @@ param t = 4
 shape circle c1 { radius: 30 depth: t z: 10 }
 ```
 
-The 2D canvas paints shapes z-sorted (higher pieces on top, with a subtle elevation shadow) and the embedded **live 3D viewport** (toggle the **3D** toolbar button) extrudes each shape by its `depth` and lifts it by its `z`, updating in real time as you edit.
+The 2D canvas paints shapes z-sorted (higher pieces on top, with a subtle elevation shadow), while `depth` and `z` remain available to fabrication exports and parametric scripts.
 
 ### Architecture
 
 Otto follows an explicit **MVC** structure — schema-driven shape models, a per-tab command/undo history, dumb render passes driven by controllers, and a lazy `SceneContext` that keeps everything pointed at the active tab. See [`src/ARCHITECTURE.md`](src/ARCHITECTURE.md) for the full picture and [`docs/SMOKE_CHECKLIST.md`](docs/SMOKE_CHECKLIST.md) for the manual test pass. Unit tests run headlessly with `node tests/run-node.js` or in the browser via `tests/run-tests.html`.
-

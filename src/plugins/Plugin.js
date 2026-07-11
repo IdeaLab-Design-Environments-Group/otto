@@ -209,10 +209,13 @@ export class Plugin {
     }
 
     /**
-     * Register a shape type (auto-cleanup on deactivate)
-     * @param {string} type
-     * @param {Function} createFn
-     * @param {Function} fromJSONFn
+     * Register a shape type (auto-cleanup on deactivate). Accepts either form
+     * that {@link PluginAPI#registerShape} supports:
+     *   - a schema-bearing Shape subclass: `registerShape(ShapeClass)`
+     *   - the legacy triple:                `registerShape(type, createFn, fromJSONFn)`
+     * @param {string|Function} type - Shape type string, or a Shape subclass
+     * @param {Function} [createFn]
+     * @param {Function} [fromJSONFn]
      */
     registerShape(type, createFn, fromJSONFn) {
         if (!this._api) {
@@ -220,7 +223,12 @@ export class Plugin {
         }
 
         this._api.registerShape(type, createFn, fromJSONFn);
-        this._registrations.push(() => this._api.unregisterShape(type));
+        // Capture the type STRING for cleanup: the class form passes a Shape
+        // subclass (unregister needs its static `type`), the legacy form
+        // passes the string directly. Without this, class-form registrations
+        // leaked because unregisterShape(ShapeClass) failed.
+        const typeName = (typeof type === 'function' && type.type) ? type.type : type;
+        this._registrations.push(() => this._api.unregisterShape(typeName));
     }
 
     /**

@@ -150,22 +150,6 @@ test('SetShapePropertyCommand: sets value + literal binding, undo restores', asy
     assertEqual(scene.shapeStore.get(circle.id).radius, 20);
 });
 
-test('SetShapePropertyCommand: non-bindable enum (facePlane) sets without throwing', async () => {
-    const scene = freshScene();
-    const history = new HistoryManager(scene);
-    const rect = ShapeRegistry.create('rectangle', { x: 0, y: 0 }, {}, scene.shapeStore);
-    scene.shapeStore.add(rect);
-    assert(!rect.getBindableProperties().includes('facePlane'), 'precondition: facePlane non-bindable');
-
-    // Must NOT throw (facePlane has no binding slot) and must not create one.
-    await history.execute(new SetShapePropertyCommand(rect.id, 'facePlane', 'xy'));
-    assertEqual(scene.shapeStore.get(rect.id).facePlane, 'xy');
-    assert(!('facePlane' in scene.shapeStore.get(rect.id).bindings), 'no binding created for enum');
-
-    await history.undo();
-    assertEqual(scene.shapeStore.get(rect.id).facePlane, 'xz', 'undo restores default');
-});
-
 test('parameter commands: add/remove/setValue(coalesce)/updateMeta round-trip', async () => {
     const scene = freshScene();
     const history = new HistoryManager(scene);

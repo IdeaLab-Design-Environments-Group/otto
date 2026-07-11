@@ -3,12 +3,11 @@
 Otto is a browser-based **2.5D parametric design environment**. You draw flat
 shapes on a canvas, drive their dimensions with parameters and bindings, give
 each piece a `depth` (extrusion) and `z` (elevation), assign woodworking-style
-edge joinery, and see the result rebuilt live in an embedded 3D viewport — or
-generate the same scene from AQUI code or Blockly blocks.
+edge joinery, or generate the same scene from AQUI code or Blockly blocks.
 
 This document describes the system **after** the MVC / schema / command-system
 refactor. If you are looking for the old `CanvasRenderer`, the memento undo
-system, or the standalone `assemble.html` assembly page — they are gone. See
+system, or the retired 3D assembly view — they are gone. See
 the individual sections for what replaced them.
 
 ## Table of contents
@@ -17,13 +16,12 @@ the individual sections for what replaced them.
 2. [Declarative shape schema](#2-declarative-shape-schema)
 3. [Command system and undo](#3-command-system-and-undo)
 4. [2.5D: depth and z](#4-25d-depth-and-z)
-5. [Live 3D viewport](#5-live-3d-viewport)
-6. [Plugins](#6-plugins)
-7. [Accessibility](#7-accessibility)
-8. [EventBus](#8-eventbus)
-9. [Geometry library](#9-geometry-library)
-10. [Testing](#10-testing)
-11. [Deferred / documented debts](#11-deferred--documented-debts)
+5. [Plugins](#5-plugins)
+6. [Accessibility](#6-accessibility)
+7. [EventBus](#7-eventbus)
+8. [Geometry library](#8-geometry-library)
+9. [Testing](#9-testing)
+10. [Deferred / documented debts](#10-deferred--documented-debts)
 
 ---
 
@@ -343,39 +341,18 @@ selection as part of their own `undo()`.
 
 ## 4. 2.5D: depth and z
 
-Otto is a 2.5D environment: each flat piece has a thickness, can float above
-the work plane, and can fold up to stand or slope. Three bindable common
-properties carry this through the whole stack:
+Otto is a 2.5D environment: each flat piece has a material thickness and can
+be elevated above the work plane. Two bindable common properties carry this
+through the whole stack:
 
-- **`depth`** — extrusion thickness in mm (default `3`, `min 0.5`);
+- **`depth`** — material thickness in mm (default `3`, `min 0.5`);
 - **`z`** — elevation of the piece's centre off the work plane in mm (default `0`);
-- **`tilt`** — fold the piece up out of the table plane in degrees (default `0`
-  flat, `90` upright). With yaw (the ordinary 2D `rotation`, applied first via
-  Euler order `YXZ`), this lets flat panels become walls and sloped roofs — a
-  wall of height `H` stands on the floor at `tilt: 90, z: H/2`. `tilt` is an
-  assembly instruction only; the 2D cut part stays flat, so the canvas still
-  draws the piece flat and shows the tilt in its selection badge.
-- **`facePlane`** — an enum (`xz` flat/default · `xy` front-vertical · `yz`
-  side-vertical) choosing which world plane the piece's flat face lies in; the
-  extrusion runs perpendicular. A quick base orientation that composes with
-  `tilt`/yaw/`z`. Non-bindable, rendered as a dropdown in the Properties panel.
-- **`cutDepth`** — how deep the piece's cut/difference features go through the
-  material in 3D (`0` = through, the default; `< depth` = a blind pocket that
-  deep). `MeshBuilder` renders a pocket as a no-CSG two-layer stack: a solid
-  floor (`depth − cutDepth`) plus a walls-with-holes top layer (`cutDepth`).
-  Today this applies to female-joinery holes; boolean-`difference` holes need
-  multi-contour PathShape support (a documented follow-up) before they cut.
-  `facePlane`/`cutDepth` are part of the mesh `geomKey`, so changing them
-  rebuilds that piece's geometry (unlike `tilt`/`z`, which are transform-only).
 
-All three are ordinary bindable schema properties, so they flow *automatically*
+Both are ordinary bindable schema properties, so they flow *automatically*
 through: Properties Panel rows, serialization, the Blockly generic-property
-blocks, AQUI's `depth:` / `z:` / `tilt:` params, and the 3D viewport. In the
-viewport, `tilt`/`z`/`rotation` take the transform-only fast path (excluded
-from the geometry key — no rebuild). See `examples/house.aqui` for a worked
-standing-house assembly.
+blocks, and AQUI's `depth:` / `z:` params.
 
-**AQUI integration required no lexer/parser change** — `depth:`, `z:`, `tilt:`
+**AQUI integration required no lexer/parser change** — `depth:` and `z:`
 are just parameter names travelling the existing generic param path into shape
 options, where the schema picks them up like any other dimension.
 
@@ -424,62 +401,7 @@ pure/DOM-free and unit-tested.
 
 ---
 
-## 5. Live 3D viewport
-
-The old standalone **`assemble.html` page + `AssemblyApp` are retired**;
-`assemble.html` is now a redirect stub pointing at `index.html`.
-
-**`Viewport3D`** (`views/viewport3d/Viewport3D.js`) is an **embedded** 3D panel
-that is the live 2.5D model, not a one-shot export:
-
-- **Lazy-loaded** — Three.js (via import map) and the component are imported on
-  first open (`Application.toggle3D`), so the 2D editor's initial page load pays
-  nothing for the 3D stack. The render loop pauses (`stop()`) when the panel is
-  hidden.
-- **EventBus-subscribed + debounced sync** — it re-syncs on `SHAPE_*`,
-  `PARAM_CHANGED`, `EDGE_JOINERY_CHANGED`, `TAB_SWITCHED`, `SCENE_LOADED`
-  (150 ms debounce keeps slider drags smooth).
-- **Per-shape `geomKey` cache** — each piece is keyed by shape id and carries a
-  `geomKey` fingerprint of everything that affects geometry (type,
-  geometry-affecting props, `depth`, joinery — but **not** `z` or `rotation`,
-  which are pure transforms).
-- **`depth` → `ExtrudeGeometry` depth; `z` → mesh elevation.** In-place layout:
-  canvas x → world x, canvas y → world z.
-- **Direct manipulation** — left-drag a piece to move it on the work plane;
-  the live gesture updates both views and becomes one undoable
-  `MutateShapesCommand`. Shift-click extends the shared selection.
-- **CAD navigation** — right-drag orbits, middle-drag pans, the wheel zooms,
-  and Fit/Iso/Top controls provide stable camera recovery. A container
-  `ResizeObserver` keeps the WebGL buffer and camera aspect synchronized as
-  either editor sidebar changes width.
-- **Automatic framing** — the first open, scene load, and tab switch frame the
-  actual piece bounds, preventing valid models from appearing as an empty
-  background merely because their canvas coordinates are far from the origin.
-- **Lightweight scene** — a neutral ground/grid replaces the textured table
-  and legs, reducing geometry and texture allocation while retaining scale,
-  axes, shadows, and depth cues.
-
-```mermaid
-flowchart TD
-    EV[SHAPE_* / PARAM_CHANGED / …] --> DEB[scheduleSync<br/>150ms debounce]
-    DEB --> LOOP{for each resolved shape}
-    LOOP --> KEY[compute geomKey]
-    KEY --> CMP{cached key ==<br/>current key?}
-    CMP -->|yes| FAST[transform-only:<br/>move / elevate / rotate]
-    CMP -->|no| REBUILD[dispose old +<br/>MeshBuilder.build]
-    LOOP --> GONE[shapes no longer present<br/>→ dispose + remove]
-```
-
-**`MeshBuilder`** (`views/viewport3d/MeshBuilder.js`) wraps the retained
-`AssemblyPieceFactory` — the battle-tested universal `toGeometryPath →
-THREE.Shape` converter, including joinery teeth and female holes — rather than
-reimplementing it. Its 2.5D contribution is threading each shape's resolved
-`depth`/`z` into the factory (instead of the old hardcoded 3 mm) and computing
-the `geomKey`.
-
----
-
-## 6. Plugins
+## 5. Plugins
 
 The `PluginManager` is now **instantiated in `Application.init()`** (it was
 previously dormant). Plugins are declared by the host page on
@@ -506,7 +428,7 @@ subsystems (EventBus, ShapeRegistry, BindingRegistry, CommandCatalog, and the
 
 ---
 
-## 7. Accessibility
+## 6. Accessibility
 
 The editor ships with a real accessibility layer, with reusable helpers in
 `src/ui/a11y/`:
@@ -529,7 +451,7 @@ tablist keyboard behavior (Left/Right/Home/End + roving tabindex).
 
 ---
 
-## 8. EventBus
+## 7. EventBus
 
 `events/EventBus.js` is unchanged in spirit: a **true singleton** (private
 static `#instance`, constructor returns the existing instance) pub/sub with
@@ -547,19 +469,19 @@ off-catalogue magic strings are now first-class entries
 
 ---
 
-## 9. Geometry library
+## 8. Geometry library
 
 `src/geometry/` (a cuttle-geometry port: `Vec` with `x`/`y`, `AffineMatrix` as
 a 2×3, `Path`, `Shape`, `Anchor`) is **unchanged and strictly 2D**. The 2.5D
 `depth`/`z` concepts live entirely in the **model** layer (COMMON_SCHEMA) and
-are consumed by the views (2D shadow/sort, 3D extrude/elevate) — they **never**
+are consumed by the 2D views for shadowing and sort order — they **never**
 enter the geometry library. Shapes build their canonical geometry via
-`toGeometryPath()`, the single source shared by bounds, hit-testing, 2D
-rendering, and the 3D mesh builder.
+`toGeometryPath()`, the single source shared by bounds, hit-testing, and 2D
+rendering.
 
 ---
 
-## 10. Testing
+## 9. Testing
 
 Tests are a **hand-rolled harness** (no external framework), so they run
 anywhere:
@@ -589,7 +511,7 @@ omit-if-default behavior fails loudly.
 
 ---
 
-## 11. Deferred / documented debts
+## 10. Deferred / documented debts
 
 These are known, deliberate trade-offs — documented so they are not mistaken
 for bugs:

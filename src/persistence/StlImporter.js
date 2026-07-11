@@ -4,9 +4,9 @@
  * Otto is a 2.5D outline editor, so a 3D STL mesh is imported by flattening it
  * to a **silhouette outline** on a chosen viewing plane. That outline becomes a
  * closed PathShape, and the extent along the perpendicular axis becomes the
- * piece's `depth` — so extruding the imported footprint in the 3D viewport
- * reproduces the original bounding volume. The result is a normal Otto piece
- * (parametric, undoable, serializable, visible in 2D and 3D).
+ * piece's `depth`, preserving the source model's perpendicular extent as
+ * fabrication metadata. The result is a normal Otto piece (parametric,
+ * undoable, serializable, and visible in 2D).
  *
  * Two outline methods are provided:
  *   - {@link StlImporter.silhouette} (default) — the TRUE outline, including

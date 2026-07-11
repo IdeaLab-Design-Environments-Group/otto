@@ -292,8 +292,8 @@ export class SetShapePropertyCommand extends Command {
         const shape = scene.shapeStore.get(this.shapeId);
         if (!shape) return;
         shape[this.property] = this.previousValue;
-        // Only bindable properties carry bindings; non-bindable ones (enums
-        // like facePlane) never touch the bindings map.
+        // Only bindable properties carry bindings; non-bindable plugin enum
+        // properties never touch the bindings map.
         if (shape.getBindableProperties().includes(this.property)) {
             if (this.previousBindingJSON) {
                 shape.bindings[this.property] = createBindingFromJSON(this.previousBindingJSON);
@@ -317,7 +317,7 @@ export class SetShapePropertyCommand extends Command {
     apply(shape, value) {
         shape[this.property] = value;
         // Keep the literal binding in step ONLY for bindable properties.
-        // Non-bindable properties (e.g. the facePlane enum) are not in the
+        // Non-bindable properties (e.g. plugin enums) are not in the
         // bindings map at all — calling setBinding on them would throw.
         if (shape.getBindableProperties().includes(this.property)) {
             const binding = shape.getBinding(this.property);
@@ -331,9 +331,7 @@ export class SetShapePropertyCommand extends Command {
     }
 
     /**
-     * Emit the right change event: SHAPE_UPDATED for a geometry-affecting
-     * non-bindable change (so the 3D viewport rebuilds), plus PARAM_CHANGED
-     * for the panels/canvas.
+     * Emit the right change events so model observers and the canvas refresh.
      * @private
      */
     emitChange(shape) {
