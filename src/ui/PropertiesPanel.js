@@ -25,10 +25,9 @@ export class PropertiesPanel extends Component {
         this.selectedShapeIds = new Set(); // Multi-selection
         this.bindingResolver = shapeStore.bindingResolver;
         this.selectedEdges = []; // Edge selection
-        
+
         // Subscribe to shape selection events (only once in constructor)
         this.subscribe(EVENTS.SHAPE_SELECTED, (payload) => {
-            console.log('PropertiesPanel: Shape selected event received', payload);
             this.selectedShape = payload ? payload.shape : null;
             if (payload && payload.selectedIds) {
                 this.selectedShapeIds = new Set(payload.selectedIds);
@@ -39,16 +38,16 @@ export class PropertiesPanel extends Component {
             }
             this.render();
         });
-        
+
         // Subscribe to shape added/removed events to update the list
         this.subscribe(EVENTS.SHAPE_ADDED, () => {
             this.render();
         });
-        
+
         this.subscribe(EVENTS.SHAPE_REMOVED, () => {
             this.render();
         });
-        
+
         // Subscribe to edge selection events
         this.subscribe(EVENTS.EDGE_SELECTED, (payload) => {
             this.selectedEdges = payload?.edges || [];
@@ -74,24 +73,23 @@ export class PropertiesPanel extends Component {
                 });
             }
         });
-        
+
         // Check for initially selected shapes
         const selectedShape = this.shapeStore.getSelected();
         if (selectedShape) {
             this.selectedShape = selectedShape;
-            console.log('PropertiesPanel: Found initially selected shape', selectedShape);
         }
         const selectedIds = this.shapeStore.getSelectedIds();
         if (selectedIds.size > 0) {
             this.selectedShapeIds = selectedIds;
         }
-        
+
         // Helper method to request render
         this.requestRender = () => {
             setTimeout(() => this.render(), 0);
         };
     }
-    
+
     /**
      * Render the properties panel - now shows all shapes in compact layers format
      */
@@ -232,87 +230,60 @@ export class PropertiesPanel extends Component {
 
         this.container.appendChild(edgeSection);
     }
-    
+
     /**
      * Render all shapes in a compact layers-style list
-     * @param {Array<Shape>} shapes 
+     * @param {Array<Shape>} shapes
      */
     renderLayersList(shapes) {
         // Render shapes in reverse order (last drawn = top of list)
         const reversedShapes = [...shapes].reverse();
-        
+
         reversedShapes.forEach(shape => {
             const layerItem = this.createLayerItem(shape);
             this.container.appendChild(layerItem);
         });
     }
-    
+
     /**
      * Create a layer item for a shape
-     * @param {Shape} shape 
+     * @param {Shape} shape
      * @returns {HTMLElement}
      */
     createLayerItem(shape) {
         const isSelected = this.selectedShapeIds.has(shape.id) || this.selectedShape?.id === shape.id;
-        
+
         const item = this.createElement('div', {
             class: `layer-item ${isSelected ? 'layer-item-selected' : ''}`
         });
-        
-        // Left side: expand/collapse icon (for paths) and shape name
+
+        // Left side: selection dot and shape name
         const leftSide = this.createElement('div', {
             class: 'layer-item-left'
         });
-        
-        // Expand/collapse icon for paths (placeholder for now)
-        if (shape.type === 'path') {
-            const expandIcon = this.createElement('span', {
-                class: 'layer-expand-icon'
-            }, '▶');
-            leftSide.appendChild(expandIcon);
-        } else {
-            // Spacer for non-path shapes
-            const spacer = this.createElement('span', {
-                class: 'layer-expand-icon layer-expand-icon-hidden'
-            }, '▶');
-            leftSide.appendChild(spacer);
-        }
-        
+
+        // Selection indicator dot (filled when selected)
+        const dot = this.createElement('span', {
+            class: 'layer-item-dot'
+        });
+        leftSide.appendChild(dot);
+
         // Shape name
         const shapeName = this.createElement('span', {
             class: 'layer-item-name'
         }, shape.id);
         leftSide.appendChild(shapeName);
-        
-        // Right side: icons
-        const rightSide = this.createElement('div', {
-            class: 'layer-item-right'
-        });
-        
-        // Transform icon (up/down arrows)
-        const transformIcon = this.createElement('span', {
-            class: 'layer-icon layer-icon-transform',
-            title: 'Transform'
-        }, '⇅');
-        rightSide.appendChild(transformIcon);
-        
-        // Path/stroke icon (wavy line)
-        const pathIcon = this.createElement('span', {
-            class: 'layer-icon layer-icon-path',
-            title: 'Path'
-        }, '~');
-        rightSide.appendChild(pathIcon);
-        
+
+        // Right side: a muted badge naming the shape type
+        const typeBadge = this.createElement('span', {
+            class: 'layer-type-badge'
+        }, shape.type);
+
         item.appendChild(leftSide);
-        item.appendChild(rightSide);
-        
+        item.appendChild(typeBadge);
+
         // Click to select
         item.addEventListener('click', (e) => {
-            // Don't trigger if clicking on icons
-            if (e.target.classList.contains('layer-icon')) {
-                return;
-            }
-            
             const shiftKey = e.shiftKey;
             if (shiftKey) {
                 // Multi-select
@@ -329,19 +300,19 @@ export class PropertiesPanel extends Component {
                 this.selectedShape = shape;
                 this.selectedShapeIds = new Set([shape.id]);
             }
-            
+
             EventBus.emit(EVENTS.SHAPE_SELECTED, {
                 id: shape.id,
                 shape: shape,
                 selectedIds: Array.from(this.selectedShapeIds)
             });
-            
+
             this.render();
         });
-        
+
         return item;
     }
-    
+
     /**
      * Render empty state
      */
@@ -349,14 +320,14 @@ export class PropertiesPanel extends Component {
         const message = this.createElement('div', {
             class: 'properties-empty'
         }, 'No shapes');
-        
+
         if (this.container) {
             this.container.appendChild(message);
         } else {
             console.warn('PropertiesPanel: Cannot render empty state, container is null');
         }
     }
-    
+
     /**
      * Render multi-selection properties - show each shape's properties vertically
      */
@@ -364,18 +335,18 @@ export class PropertiesPanel extends Component {
         const selectedShapes = Array.from(this.selectedShapeIds)
             .map(id => this.shapeStore.get(id))
             .filter(shape => shape !== null);
-        
+
         if (selectedShapes.length === 0) {
             this.renderEmpty();
             return;
         }
-        
+
         // Header showing count
         const header = this.createElement('div', {
             class: 'properties-header'
         }, `${selectedShapes.length} Shapes Selected`);
         this.container.appendChild(header);
-        
+
         // Render each shape's properties vertically
         selectedShapes.forEach((shape, index) => {
             // Add separator between shapes (except before first)
@@ -385,43 +356,45 @@ export class PropertiesPanel extends Component {
                 });
                 this.container.appendChild(separator);
             }
-            
+
             // Shape type header (e.g., "Circle")
             const shapeHeader = this.createElement('div', {
                 class: 'properties-section-header'
             }, shape.type.charAt(0).toUpperCase() + shape.type.slice(1));
             this.container.appendChild(shapeHeader);
-            
+
             // Render all properties for this shape (same as single selection)
             this.renderPropertiesForShape(shape);
         });
     }
-    
+
     /**
      * Render properties for a single shape (helper method for multi-select)
-     * @param {Shape} shape 
+     * @param {Shape} shape
      */
     renderPropertiesForShape(shape) {
-        // Shape ID
+        // Shape ID — a compact, read-only caption
         const idDiv = this.createElement('div', {
-            class: 'property-item'
+            class: 'property-id'
         });
-        idDiv.appendChild(this.createElement('label', {}, 'ID:'));
         idDiv.appendChild(this.createElement('span', {
-            class: 'property-value'
+            class: 'property-id-label'
+        }, 'ID'));
+        idDiv.appendChild(this.createElement('span', {
+            class: 'property-id-value'
         }, shape.id));
         this.container.appendChild(idDiv);
-        
+
         // Bindable properties
         const bindableProps = shape.getBindableProperties();
         bindableProps.forEach(property => {
             const propItem = this.createElement('div', {
                 class: 'property-item'
             });
-            
+
             const label = this.createElement('label', {}, `${property}:`);
             propItem.appendChild(label);
-            
+
             const binding = shape.getBinding(property);
             // Get current property value - resolve binding if present, otherwise use shape property
             let currentValue = shape[property];
@@ -483,10 +456,10 @@ export class PropertiesPanel extends Component {
         item.appendChild(select);
         return item;
     }
-    
+
     /**
      * Render properties for a shape
-     * @param {Shape} shape 
+     * @param {Shape} shape
      */
     renderProperties(shape) {
         // Shape type header
@@ -494,16 +467,16 @@ export class PropertiesPanel extends Component {
             class: 'properties-header'
         }, `${shape.type.charAt(0).toUpperCase() + shape.type.slice(1)} Properties`);
         this.container.appendChild(header);
-        
+
         // Use the shared method
         this.renderPropertiesForShape(shape);
     }
-    
+
     /**
      * Render binding editor for a property
-     * @param {string} property 
-     * @param {Binding|null} currentBinding 
-     * @param {number} currentValue 
+     * @param {string} property
+     * @param {Binding|null} currentBinding
+     * @param {number} currentValue
      * @param {Shape} shape - The shape this property belongs to (for multi-select)
      * @returns {HTMLElement}
      */
@@ -513,48 +486,48 @@ export class PropertiesPanel extends Component {
         const editor = this.createElement('div', {
             class: 'binding-editor'
         });
-        
+
         // Binding type selector
         const typeSelect = this.createElement('select', {
             class: 'binding-type-select'
         });
-        
+
         const literalOption = this.createElement('option', {
             value: 'literal'
         }, 'Value');
         const paramOption = this.createElement('option', {
             value: 'parameter'
-        }, 'Link to Parameter');
+        }, 'Parameter');
         const exprOption = this.createElement('option', {
             value: 'expression'
         }, 'Formula');
-        
+
         typeSelect.appendChild(literalOption);
         typeSelect.appendChild(paramOption);
         typeSelect.appendChild(exprOption);
-        
+
         // Set current type
         if (currentBinding) {
             typeSelect.value = currentBinding.type;
         } else {
             typeSelect.value = 'literal';
         }
-        
+
         // Binding value container
         const valueContainer = this.createElement('div', {
             class: 'binding-value-container'
         });
-        
+
         // Initial render of binding input
         const updateBindingInput = () => {
             valueContainer.innerHTML = '';
             const type = typeSelect.value;
-            
+
             if (type === 'literal') {
                 valueContainer.appendChild(this.renderLiteralInput(property, currentValue, targetShape));
             } else if (type === 'parameter') {
-                const paramId = currentBinding && currentBinding.type === 'parameter' 
-                    ? currentBinding.parameterId 
+                const paramId = currentBinding && currentBinding.type === 'parameter'
+                    ? currentBinding.parameterId
                     : null;
                 valueContainer.appendChild(this.renderParameterDropdown(property, paramId, targetShape));
             } else if (type === 'expression') {
@@ -564,29 +537,30 @@ export class PropertiesPanel extends Component {
                 valueContainer.appendChild(this.renderExpressionInput(property, expr, targetShape));
             }
         };
-        
+
         typeSelect.addEventListener('change', () => {
             updateBindingInput();
         });
-        
+
         updateBindingInput();
-        
-        editor.appendChild(typeSelect);
+
+        // Value control fills the row; the type selector sits compactly beside it.
         editor.appendChild(valueContainer);
-        
+        editor.appendChild(typeSelect);
+
         return editor;
     }
-    
+
     /**
      * Render literal input
-     * @param {string} property 
-     * @param {number} value 
+     * @param {string} property
+     * @param {number} value
      * @param {Shape} shape - The shape this property belongs to
      * @returns {HTMLElement}
      */
     renderLiteralInput(property, value, shape = null) {
         const targetShape = shape || this.selectedShape;
-        
+
         // Get current value - if there's a binding, resolve it, otherwise use the property value
         let currentValue = value;
         if (targetShape) {
@@ -597,14 +571,14 @@ export class PropertiesPanel extends Component {
                 currentValue = targetShape[property];
             }
         }
-        
+
         const input = this.createElement('input', {
             type: 'number',
             class: 'binding-input binding-literal',
             value: currentValue || 0,
             step: 'any'
         });
-        
+
         // Only update on blur or Enter key to allow multi-digit typing
         const updateValue = () => {
             if (!targetShape) return;
@@ -615,7 +589,7 @@ export class PropertiesPanel extends Component {
                 this.setBinding(targetShape.id, property, new LiteralBinding(newValue));
             }
         };
-        
+
         input.addEventListener('blur', updateValue);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
@@ -623,14 +597,14 @@ export class PropertiesPanel extends Component {
                 input.blur(); // Trigger blur which will update the value
             }
         });
-        
+
         return input;
     }
-    
+
     /**
      * Render parameter dropdown
-     * @param {string} property 
-     * @param {string|null} selectedParamId 
+     * @param {string} property
+     * @param {string|null} selectedParamId
      * @param {Shape} shape - The shape this property belongs to
      * @returns {HTMLElement}
      */
@@ -639,13 +613,13 @@ export class PropertiesPanel extends Component {
         const select = this.createElement('select', {
             class: 'binding-input binding-parameter'
         });
-        
+
         // Add empty option
         const emptyOption = this.createElement('option', {
             value: ''
         }, '-- Select a Parameter --');
         select.appendChild(emptyOption);
-        
+
         // Add parameter options
         const parameters = this.parameterStore.getAll();
         parameters.forEach(param => {
@@ -657,21 +631,21 @@ export class PropertiesPanel extends Component {
             }
             select.appendChild(option);
         });
-        
+
         select.addEventListener('change', () => {
             if (select.value && targetShape) {
                 const binding = new ParameterBinding(select.value);
                 this.setBinding(targetShape.id, property, binding);
             }
         });
-        
+
         return select;
     }
-    
+
     /**
      * Render expression input
-     * @param {string} property 
-     * @param {string} expression 
+     * @param {string} property
+     * @param {string} expression
      * @param {Shape} shape - The shape this property belongs to
      * @returns {HTMLElement}
      */
@@ -683,22 +657,22 @@ export class PropertiesPanel extends Component {
             value: expression || '',
             placeholder: 'e.g., radius * 2 + 10'
         });
-        
+
         input.addEventListener('change', () => {
             if (input.value.trim() && targetShape) {
                 const binding = new ExpressionBinding(input.value.trim());
                 this.setBinding(targetShape.id, property, binding);
             }
         });
-        
+
         return input;
     }
-    
+
     /**
      * Set binding for a shape property
-     * @param {string} shapeId 
-     * @param {string} property 
-     * @param {Binding} binding 
+     * @param {string} shapeId
+     * @param {string} property
+     * @param {Binding} binding
      */
     setBinding(shapeId, property, binding) {
         // Keep the raw property in step for literal bindings so the shape

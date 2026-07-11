@@ -445,8 +445,19 @@ that is the live 2.5D model, not a one-shot export:
   which are pure transforms).
 - **`depth` → `ExtrudeGeometry` depth; `z` → mesh elevation.** In-place layout:
   canvas x → world x, canvas y → world z.
-- **Read-only v1** — click a piece to select its shape; selecting in 2D
-  emissive-highlights the piece.
+- **Direct manipulation** — left-drag a piece to move it on the work plane;
+  the live gesture updates both views and becomes one undoable
+  `MutateShapesCommand`. Shift-click extends the shared selection.
+- **CAD navigation** — right-drag orbits, middle-drag pans, the wheel zooms,
+  and Fit/Iso/Top controls provide stable camera recovery. A container
+  `ResizeObserver` keeps the WebGL buffer and camera aspect synchronized as
+  either editor sidebar changes width.
+- **Automatic framing** — the first open, scene load, and tab switch frame the
+  actual piece bounds, preventing valid models from appearing as an empty
+  background merely because their canvas coordinates are far from the origin.
+- **Lightweight scene** — a neutral ground/grid replaces the textured table
+  and legs, reducing geometry and texture allocation while retaining scale,
+  axes, shadows, and depth cues.
 
 ```mermaid
 flowchart TD
