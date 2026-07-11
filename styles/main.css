@@ -1782,3 +1782,150 @@ body.dark-theme .canvas-container {
     color: var(--text-light);
     border-color: var(--nav-blue);
 }
+
+/* ========================================
+   AI Fabrication Coach panel
+   ======================================== */
+
+.btn-coach-run {
+    width: 100%;
+    min-height: var(--min-target-size);
+    padding: 8px;
+    margin-bottom: 10px;
+    background: var(--nav-blue);
+    color: var(--text-light);
+    border: none;
+    border-radius: var(--border-radius);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.btn-coach-run:hover:not(:disabled) {
+    background: var(--nav-blue-hover);
+}
+
+.btn-coach-run:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+}
+
+.btn-coach-run:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.coach-results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.coach-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.coach-error {
+    font-size: 12px;
+    color: var(--accent-orange-hover);
+    margin: 0;
+}
+
+.coach-finding {
+    padding: 10px;
+    background: white;
+    border: 1px solid var(--border-light);
+    border-left: 3px solid var(--border-medium);
+    border-radius: var(--border-radius);
+}
+
+.coach-finding--error { border-left-color: rgb(220, 38, 38); }
+.coach-finding--warning { border-left-color: var(--accent-orange); }
+.coach-finding--info { border-left-color: var(--nav-blue); }
+.coach-finding--praise { border-left-color: rgb(22, 163, 74); }
+
+.coach-finding__head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.coach-finding__icon {
+    font-weight: 700;
+}
+
+.coach-finding--error .coach-finding__icon { color: rgb(220, 38, 38); }
+.coach-finding--warning .coach-finding__icon { color: var(--accent-orange-hover); }
+.coach-finding--info .coach-finding__icon { color: var(--nav-blue); }
+.coach-finding--praise .coach-finding__icon { color: rgb(22, 163, 74); }
+
+.coach-finding__title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+
+.coach-finding__detail {
+    font-size: 12px;
+    color: var(--text-dark);
+    margin: 6px 0 0;
+    line-height: 1.4;
+}
+
+.coach-finding__suggestion {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 4px 0 0;
+    line-height: 1.4;
+}
+
+.coach-key-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+}
+
+.coach-key-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.coach-key-input {
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: monospace;
+    border: 1px solid var(--border-light);
+    border-radius: var(--border-radius);
+    background: white;
+}
+
+.btn-coach-key {
+    min-height: var(--min-target-size);
+    padding: 6px;
+    background: var(--accent-orange);
+    color: var(--text-light);
+    border: none;
+    border-radius: var(--border-radius);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-coach-key:hover {
+    background: var(--accent-orange-hover);
+}
+
+.coach-key-help {
+    font-size: 11px;
+    color: var(--link-color);
+}

@@ -21,6 +21,7 @@ import { CanvasInputController } from '../controllers/CanvasInputController.js';
 import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
 import { ParametersMenu } from '../ui/ParametersMenu.js';
 import { PropertiesPanel } from '../ui/PropertiesPanel.js';
+import { CoachPanel } from '../ui/CoachPanel.js';
 import { TabBar } from '../ui/TabBar.js';
 import { ZoomControls } from '../ui/ZoomControls.js';
 import { PanelResizer } from '../ui/PanelResizer.js';
@@ -58,6 +59,7 @@ export class Application {
         this.shapeLibrary = null;
         this.parametersMenu = null;
         this.propertiesPanel = null;
+        this.coachPanel = null;
         this.tabBar = null;
         this.zoomControls = null;
         this.dragDropManager = null;
@@ -83,6 +85,7 @@ export class Application {
         const canvasElement = document.getElementById('main-canvas');
         const parametersMenuContainer = document.getElementById('parameters-menu-container');
         const propertiesPanelContainer = document.getElementById('properties-panel-container');
+        const coachPanelContainer = document.getElementById('coach-panel-container');
         const zoomControlsContainer = document.getElementById('zoom-controls-container');
         const blocklyContainer = document.getElementById('blockly-container');
         const codeEditorContainer = document.getElementById('code-editor-container');
@@ -192,6 +195,15 @@ export class Application {
             this.context
         );
         this.propertiesPanel.mount();
+
+        // AI Fabrication Coach: reads the active scene through SceneContext and
+        // the current AQUI source from the code editor (optional container).
+        if (coachPanelContainer) {
+            this.coachPanel = new CoachPanel(coachPanelContainer, this.context, {
+                getCode: () => this.codeEditor?.editor?.getValue?.() ?? ''
+            });
+            this.coachPanel.mount();
+        }
 
         // Initialize DragDropManager (context-based: always drops into the
         // active tab's store)
