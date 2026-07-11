@@ -1,6 +1,6 @@
 /**
  * CodeEditor - Text-based programming interface for Otto using CodeMirror
- * 
+ *
  * Provides a code editor with syntax highlighting for Otto/Aqui language.
  * Styled with beige background and black text (solarized light).
  */
@@ -26,7 +26,7 @@ export class CodeEditor extends Component {
          */
         this.context = context;
         this.codeRunner = new CodeRunner({ shapeStore, parameterStore });
-        
+
         this.editor = null; // CodeMirror instance
         this.textarea = null; // Fallback textarea instance
         this.output = null;
@@ -49,29 +49,29 @@ export class CodeEditor extends Component {
 
         // Header with buttons
         const header = this.createElement('div', { class: 'code-editor__header' });
-        
-        this.runButton = this.createElement('button', { 
+
+        this.runButton = this.createElement('button', {
             class: 'code-editor__btn code-editor__btn--run',
             type: 'button'
         }, '▶ Run');
         this.runButton.addEventListener('click', () => this.runCode());
         header.appendChild(this.runButton);
 
-        const clearBtn = this.createElement('button', { 
+        const clearBtn = this.createElement('button', {
             class: 'code-editor__btn code-editor__btn--clear',
             type: 'button'
         }, 'Clear');
         clearBtn.addEventListener('click', () => this.clearCode());
         header.appendChild(clearBtn);
 
-        const astBtn = this.createElement('button', { 
+        const astBtn = this.createElement('button', {
             class: 'code-editor__btn code-editor__btn--ast',
             type: 'button'
         }, 'AST');
         astBtn.addEventListener('click', () => this.showAst());
         header.appendChild(astBtn);
 
-        const helpBtn = this.createElement('button', { 
+        const helpBtn = this.createElement('button', {
             class: 'code-editor__btn code-editor__btn--help',
             type: 'button'
         }, '?');
@@ -82,7 +82,7 @@ export class CodeEditor extends Component {
 
         // Wrapper for CodeMirror
         const editorWrapper = this.createElement('div', { class: 'code-editor__wrapper' });
-        
+
         // Create textarea for CodeMirror
         const textarea = this.createElement('textarea', { id: 'otto-code-editor' });
         textarea.value = '';
@@ -113,17 +113,31 @@ export class CodeEditor extends Component {
             return;
         }
 
-        // Define Aqui/Otto syntax mode
+        // Define Aqui/Otto syntax mode. The keyword, shape and color lists mirror
+        // the Lexer's keyword table (src/programming/Lexer.js) so highlighting stays
+        // in sync with what the language actually parses. Matching is case-insensitive
+        // because the Lexer lowercases identifiers before looking them up.
         CodeMirror.defineSimpleMode('otto', {
             start: [
+                // Comments come first so `//` is never mistaken for a divide operator.
                 { regex: /\/\/.*/, token: 'comment' },
-                { regex: /\b(?:shape|param|layer|transform|add|rotate|scale|position|if|else|for|from|to|step|def|return|union|difference|intersection|draw|forward|backward|right|left|goto|penup|pendown|fill|fillColor|color|strokeColor|strokeWidth|opacity|constraints|coincident|distance|horizontal|vertical)\b/, token: 'keyword' },
-                { regex: /\b(?:circle|rectangle|triangle|ellipse|polygon|star|arc|roundedRectangle|roundedrectangle|path|line|arrow|text|donut|spiral|cross|wave|slot|chamferRectangle|chamferrectangle|gear)\b/, token: 'variable-2' },
-                { regex: /\d+\.?\d*/, token: 'number' },
+                // Literals
                 { regex: /"(?:[^\\]|\\.)*?"/, token: 'string' },
-                { regex: /#[0-9a-fA-F]{3,8}/, token: 'string-2' },
-                { regex: /\b(?:red|green|blue|yellow|orange|purple|pink|brown|black|white|gray|grey|cyan|magenta|lime|navy|teal|silver|gold)\b/, token: 'string-2' },
-                { regex: /[+\-*\/=<>!]+/, token: 'operator' },
+                { regex: /#[0-9a-fA-F]{3,8}\b/, token: 'string-2' },
+                { regex: /\d+\.?\d*/, token: 'number' },
+                { regex: /\b(?:true|false)\b/i, token: 'atom' },
+                // Property keys: an identifier immediately followed by a colon
+                // (e.g. width:, depth:, rotation:). Placed before keywords so every
+                // key inside a shape/transform block is coloured consistently.
+                { regex: /[A-Za-z_]\w*(?=\s*:)/, token: 'property' },
+                // Language keywords (control flow, transforms, styling, turtle, constraints)
+                { regex: /\b(?:param|shape|layer|transform|add|subtract|rotate|scale|position|if|else|endif|and|or|not|for|from|to|step|in|def|return|union|difference|intersection|draw|forward|backward|right|left|goto|penup|pendown|constraints|coincident|distance|horizontal|vertical|fill|filled|fillcolor|color|stroke|strokecolor|strokewidth|opacity|alpha|transparent|visible|hidden|style|thickness|border|background)\b/i, token: 'keyword' },
+                // Shape primitives
+                { regex: /\b(?:circle|rectangle|roundedrectangle|chamferrectangle|triangle|ellipse|polygon|star|arc|path|line|arrow|text|donut|spiral|cross|wave|slot|gear)\b/i, token: 'variable-2' },
+                // Named colors
+                { regex: /\b(?:red|green|blue|yellow|orange|purple|pink|brown|black|white|gray|grey|lightgray|lightgrey|darkgray|darkgrey|cyan|magenta|lime|navy|teal|silver|gold)\b/i, token: 'string-2' },
+                // Operators (arithmetic, comparison, bitwise)
+                { regex: /[+\-*/%=<>!&|^~?@$]+/, token: 'operator' },
                 { regex: /[\{\[\(]/, indent: true },
                 { regex: /[\}\]\)]/, dedent: true }
             ],
@@ -408,7 +422,7 @@ export class CodeEditor extends Component {
      */
     runCode({ silentIfEmpty = false } = {}) {
         const code = this.editor ? this.editor.getValue().trim() : '';
-        
+
         if (!code) {
             if (!silentIfEmpty) {
                 this.showOutput('No code to run', 'warning');
@@ -443,7 +457,7 @@ export class CodeEditor extends Component {
                     `  Parameters created: ${result.parametersCreated}`,
                     'success'
                 );
-                
+
                 // Canvas repaints via the SHAPE_ADDED/REMOVED events the run emitted.
                 // Emit event so other components can update
                 EventBus.emit(EVENTS.CODE_EXECUTED, { code, result });
@@ -496,14 +510,10 @@ SHAPES
          chamferrectangle
 
 2.5D (every shape)
-  depth: <mm>       extrusion thickness (default 3)
+  depth: <mm>       material thickness (default 3)
   z: <mm>           elevation off the work plane (default 0)
-  tilt: <deg>       fold up in 3D: 0 flat, 90 upright (walls/roofs)
-  facePlane: "xz"   flat face plane: "xz" flat · "xy" front · "yz" side
-  cutDepth: <mm>    depth of cut/pocket features (0 = through, default)
   e.g.  shape circle c1 { radius: 30 depth: 6 z: 10 }
-  To stand a wall H tall on the floor: tilt: 90  z: H/2
-  depth/z/tilt/cutDepth accept parameters; facePlane is a quoted string
+  depth and z accept parameters
 
 TRANSFORMS
   transform shapeName {
@@ -532,7 +542,7 @@ TURTLE GRAPHICS
 
 SHORTCUTS
   Shift+Enter  Run code`;
-        
+
         this.showOutput(helpText, 'help');
     }
 

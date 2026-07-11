@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Local, secret LLM configuration for the AI Fabrication Coach.
+# Holds an API key — must never be committed. Copy llm.config.example.js
+# to this path and paste your own key.
+src/review/llm.config.local.js
+
+# Dependencies (none today; Otto loads libs via CDN, but keep this safe)
+node_modules/

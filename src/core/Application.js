@@ -44,7 +44,7 @@ export class Application {
         // Serializer is a static class, no instance needed
         this.storageManager = new StorageManager(this.tabManager, Serializer);
         this.fileManager = new FileManager(this.tabManager, Serializer);
-        
+
         // MVC canvas stack (initialized in init)
         this.context = null;            // SceneContext: lazy resolver of the active scene
         this.viewportController = null; // pan/zoom + coordinate transforms
@@ -65,14 +65,14 @@ export class Application {
         this.codeEditor = null;
         this.codeRunner = null;
         this.editorSyncConnector = null;
-        
+
         // Undo/redo is per-tab: each Tab owns a HistoryManager, reached
         // through this.context (SceneContext). No app-level history here.
 
         // Current scene state reference
         this.currentSceneState = null;
     }
-    
+
     /**
      * Initialize the application
      */
@@ -91,20 +91,20 @@ export class Application {
             !parametersMenuContainer || !propertiesPanelContainer || !zoomControlsContainer || !blocklyContainer) {
             throw new Error('Required DOM elements not found');
         }
-        
+
         // Get current scene state
         this.currentSceneState = this.tabManager.getActiveScene();
         if (!this.currentSceneState) {
             throw new Error('No active scene available');
         }
-        
+
         // Initialize UI components
         this.tabBar = new TabBar(tabBarContainer, this.tabManager);
         this.tabBar.mount();
-        
+
         this.shapeLibrary = new ShapeLibrary(shapeLibraryContainer, ShapeRegistry);
         this.shapeLibrary.mount();
-        
+
         // MVC canvas stack: context resolves the active scene lazily (the
         // TabManager instance is swapped on load/import, hence the closure),
         // the controllers own interaction, the view owns pixels.
@@ -169,7 +169,7 @@ export class Application {
             shapeStore: this.currentSceneState.shapeStore,
             parameterStore: this.currentSceneState.parameterStore
         });
-        
+
         // Initialize Zoom Controls (delegates all zoom math to the
         // ViewportController; no injected callbacks)
         this.zoomControls = new ZoomControls(zoomControlsContainer, {
@@ -177,7 +177,7 @@ export class Application {
             viewportController: this.viewportController
         });
         this.zoomControls.mount();
-        
+
         this.parametersMenu = new ParametersMenu(
             parametersMenuContainer,
             this.currentSceneState.parameterStore,
@@ -192,7 +192,7 @@ export class Application {
             this.context
         );
         this.propertiesPanel.mount();
-        
+
         // Initialize DragDropManager (context-based: always drops into the
         // active tab's store)
         this.dragDropManager = new DragDropManager(
@@ -226,10 +226,10 @@ export class Application {
 
         // Setup left panel tabs
         this.setupLeftPanelTabs();
-        
+
         // Setup keyboard shortcuts
         this.setupKeyboardShortcuts();
-        
+
         // Command catalog (backs plugin command registration + tooling).
         this.commandCatalog = new CommandCatalog();
 
@@ -284,7 +284,7 @@ export class Application {
             console.error('Plugin initialization failed:', error);
         }
     }
-    
+
     /**
      * Setup event listeners
      */
@@ -314,7 +314,7 @@ export class Application {
             this.context.history.execute(new AddShapeCommand(shape));
         });
     }
-    
+
     /**
      * Setup keyboard shortcuts
      */
@@ -328,34 +328,34 @@ export class Application {
                 e.preventDefault();
                 this.save();
             }
-            
+
             // Ctrl+O or Cmd+O: Open
             if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
                 e.preventDefault();
                 this.importFile();
             }
-            
+
             // Ctrl+Z or Cmd+Z: Undo
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                 e.preventDefault();
                 this.undo();
                 this.updateUndoRedoUI();
             }
-            
+
             // Ctrl+Y or Cmd+Y or Ctrl+Shift+Z: Redo
-            if (((e.ctrlKey || e.metaKey) && e.key === 'y') || 
+            if (((e.ctrlKey || e.metaKey) && e.key === 'y') ||
                 ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
                 e.preventDefault();
                 this.redo();
                 this.updateUndoRedoUI();
             }
-            
+
             // Ctrl+T or Cmd+T: New tab
             if ((e.ctrlKey || e.metaKey) && e.key === 't') {
                 e.preventDefault();
                 this.newTab();
             }
-            
+
             // Delete: Remove selected shape
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
@@ -377,10 +377,10 @@ export class Application {
         if (el.closest('.blockly-workspace') || el.closest('#blockly-container')) return true;
         return false;
     }
-    
+
     /**
      * Update components when switching to a new scene
-     * @param {SceneState} sceneState 
+     * @param {SceneState} sceneState
      */
     updateComponentsForNewScene(sceneState) {
         // The canvas stack (CanvasView, controllers, ZoomControls,
@@ -485,7 +485,7 @@ export class Application {
             }
         });
     }
-    
+
     /**
      * Load initial state from autosave
      */
@@ -495,15 +495,15 @@ export class Application {
             if (tabManager) {
                 // Replace current tab manager with loaded one
                 this.tabManager = tabManager;
-                
+
                 // Update file and storage managers to use new tab manager
                 this.storageManager.tabManager = tabManager;
                 this.fileManager.tabManager = tabManager;
-                
+
                 // Update tab bar
                 this.tabBar.tabManager = tabManager;
                 this.tabBar.render();
-                
+
                 // Update current scene
                 this.currentSceneState = this.tabManager.getActiveScene();
                 if (this.currentSceneState) {
@@ -516,7 +516,7 @@ export class Application {
             console.error('Error loading initial state:', error);
         }
     }
-    
+
     /**
      * Create a new tab
      */
@@ -524,7 +524,7 @@ export class Application {
         const tabNumber = this.tabManager.tabs.length + 1;
         this.tabManager.createTab(`Scene ${tabNumber}`);
     }
-    
+
     /**
      * Save current state (manual save to localStorage)
      */
@@ -540,7 +540,7 @@ export class Application {
         }
         return success;
     }
-    
+
     /**
      * Load from localStorage
      */
@@ -563,10 +563,10 @@ export class Application {
         this.showNotification('No saved data found', 'error');
         return false;
     }
-    
+
     /**
      * Export to file
-     * @param {string} filename 
+     * @param {string} filename
      */
     exportFile(filename = null) {
         const success = this.fileManager.exportToFile(filename);
@@ -577,7 +577,7 @@ export class Application {
         }
         return success;
     }
-    
+
     /**
      * Import from file
      */
@@ -597,7 +597,7 @@ export class Application {
             this.showNotification('File imported successfully!', 'success');
         }
     }
-    
+
     /**
      * Import a 3D STL file as a 2.5D footprint piece.
      *
@@ -734,12 +734,12 @@ export class Application {
 
         // Add to document
         document.body.appendChild(notification);
-        
+
         // Show notification
         setTimeout(() => {
             notification.classList.add('show');
         }, 10);
-        
+
         // Remove after 3 seconds
         setTimeout(() => {
             notification.classList.remove('show');
@@ -750,7 +750,7 @@ export class Application {
             }, 300);
         }, 3000);
     }
-    
+
     /**
      * Undo the last command on the active tab's history. Commands revert
      * through the stores, which emit events that repaint the canvas and
@@ -795,52 +795,6 @@ export class Application {
         if (idsToDelete.length > 0) {
             this.context.history.execute(new RemoveShapesCommand(idsToDelete));
         }
-    }
-
-    /**
-     * Toggle the embedded live 3D viewport. Three.js and the Viewport3D
-     * component are lazy-loaded on first open, so the 2D editor's initial
-     * load pays nothing for the 3D stack.
-     *
-     * @returns {Promise<boolean>} The new visibility state.
-     */
-    async toggle3D() {
-        const container = document.getElementById('viewport-3d-container');
-        const button = document.getElementById('btn-assembly');
-        if (!container) return false;
-
-        const willShow = container.classList.contains('is-hidden');
-        container.classList.toggle('is-hidden', !willShow);
-        if (button) button.setAttribute('aria-pressed', String(willShow));
-
-        if (willShow) {
-            // The canvas shrank to make room; refit it BEFORE measuring the 3D
-            // panel so its layout (flex) has settled and clientWidth/Height are
-            // non-zero when the renderer sizes itself.
-            this.canvasView?.resizeCanvas();
-            try {
-                if (!this.viewport3D) {
-                    const { Viewport3D } = await import('../views/viewport3d/Viewport3D.js');
-                    this.viewport3D = new Viewport3D(container, { context: this.context });
-                    this.viewport3D.mount();
-                }
-                this.viewport3D.start();
-            } catch (err) {
-                // Most likely Three.js failed to load from the CDN import map.
-                console.error('3D view failed to start', err);
-                this.showNotification(
-                    'The 3D view could not load (Three.js may be blocked/offline). Check your connection.',
-                    'error'
-                );
-                container.innerHTML =
-                    '<div style="padding:16px;color:#334155;font:13px sans-serif">' +
-                    '3D view could not load Three.js. Check your network/CDN access, then toggle again.</div>';
-            }
-        } else if (this.viewport3D) {
-            this.viewport3D.stop();
-            this.canvasView?.resizeCanvas();
-        }
-        return willShow;
     }
 
     /**

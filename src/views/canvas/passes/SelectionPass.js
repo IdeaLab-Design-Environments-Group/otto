@@ -371,13 +371,11 @@ export class SelectionPass {
         ctx.fillText(heightText, 0, 0);
         ctx.restore();
 
-        // 2.5D badge: depth + elevation (+ tilt when folded), above the shape.
+        // 2.5D badge: depth + elevation, above the shape.
         if (shape) {
             const depth = Number(shape.depth ?? 3);
             const z = Number(shape.z ?? 0);
-            const tilt = Number(shape.tilt ?? 0);
-            let badge = `d ${depth.toFixed(1)}mm · z ${z.toFixed(1)}mm`;
-            if (tilt) badge += ` · tilt ${tilt.toFixed(0)}°`;
+            const badge = `d ${depth.toFixed(1)}mm · z ${z.toFixed(1)}mm`;
             const badgeX = x + w / 2;
             const badgeY = y - 12 / frame.viewport.zoom;
             const bw = ctx.measureText(badge).width + textPadding * 2;

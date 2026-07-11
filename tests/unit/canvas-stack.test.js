@@ -46,7 +46,9 @@ function makeCanvasStub(ctx) {
         getContext: () => ctx,
         getBoundingClientRect: () => ({ width: 800, height: 600, left: 0, top: 0 }),
         addEventListener() {},
-        removeEventListener() {}
+        removeEventListener() {},
+        setPointerCapture() {},
+        releasePointerCapture() {}
     };
 }
 
@@ -195,4 +197,41 @@ test('viewport controller pan/zoom math', async () => {
     } finally {
         restore();
     }
+});
+
+test('touch gestures pan with one finger and pinch-zoom around two fingers', async () => {
+    const { CanvasInputController } = await import('../../src/controllers/CanvasInputController.js');
+    const input = Object.create(CanvasInputController.prototype);
+    input.touchPoints = new Map();
+    input.touchGesture = null;
+    input.view = {
+        canvas: {
+            style: {},
+            getBoundingClientRect: () => ({ left: 0, top: 0 }),
+            setPointerCapture() {},
+            releasePointerCapture() {}
+        }
+    };
+    input.vc = {
+        viewport: { x: 12, y: -8, zoom: 2 },
+        pan(dx, dy) { this.viewport.x += dx; this.viewport.y += dy; },
+        zoom(factor) { this.viewport.zoom *= factor; }
+    };
+    const touch = (pointerId, clientX, clientY) => ({
+        pointerType: 'touch', pointerId, clientX, clientY, preventDefault() {}
+    });
+
+    input.onTouchPointerDown(touch(1, 100, 100));
+    input.onTouchPointerMove(touch(1, 130, 115));
+    assertEqual(input.vc.viewport.x, 42, 'one-finger drag pans x');
+    assertEqual(input.vc.viewport.y, 7, 'one-finger drag pans y');
+
+    input.onTouchPointerDown(touch(2, 230, 115));
+    const zoomBefore = input.vc.viewport.zoom;
+    input.onTouchPointerMove(touch(2, 280, 115));
+    assert(input.vc.viewport.zoom > zoomBefore, 'spreading two fingers zooms in');
+
+    input.onTouchPointerUp(touch(2, 280, 115));
+    input.onTouchPointerUp(touch(1, 130, 115));
+    assertEqual(input.touchPoints.size, 0, 'touch state clears after gesture');
 });

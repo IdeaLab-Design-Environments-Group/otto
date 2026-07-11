@@ -6,7 +6,9 @@
  */
 import { test, assert, assertEqual } from '../harness.js';
 import { PluginManager } from '../../src/plugins/PluginManager.js';
+import { Plugin } from '../../src/plugins/Plugin.js';
 import { ShapeRegistry } from '../../src/models/shapes/ShapeRegistry.js';
+import { Shape } from '../../src/models/shapes/Shape.js';
 import { BindingRegistry } from '../../src/models/BindingRegistry.js';
 import { CommandCatalog } from '../../src/commands/CommandCatalog.js';
 import { SceneState } from '../../src/core/SceneState.js';
@@ -95,4 +97,44 @@ test('registerCommand adapts a class into a catalog factory', async () => {
     assertEqual(cmd.label, 'hi');
     cmd.execute(scene);
     assert(cmd.ran, 'built command executes');
+});
+
+test('circular plugin dependencies fail gracefully (no stack overflow)', async () => {
+    const scene = new SceneState();
+    const manager = makeManager(scene);
+    // cycle-a depends on cycle-b, cycle-b depends on cycle-a.
+    manager.register(new Plugin({ id: 'cycle-a', dependencies: ['cycle-b'] }));
+    manager.register(new Plugin({ id: 'cycle-b', dependencies: ['cycle-a'] }));
+
+    // Before the cycle guard this recursed until the call stack overflowed;
+    // now it must return false and leave both plugins inactive.
+    const ok = await manager.activate('cycle-a');
+    assertEqual(ok, false, 'activating a cyclic plugin returns false');
+    assert(!manager.isActive('cycle-a'), 'cycle-a not marked active');
+    assert(!manager.isActive('cycle-b'), 'cycle-b not marked active');
+});
+
+test('class-based shape registration is unregistered on deactivate', async () => {
+    ShapeRegistry.unregister('hexagon-test'); // hygiene (noop)
+    const scene = new SceneState();
+    const manager = makeManager(scene);
+
+    class Hexagon extends Shape {
+        static type = 'hexagon-test';
+        static SCHEMA = { size: { type: 'number', default: 10, bindable: true, label: 'Size' } };
+        getBounds() { return { x: this.centerX ?? 0, y: this.centerY ?? 0, width: this.size, height: this.size }; }
+    }
+    class HexPlugin extends Plugin {
+        constructor() { super({ id: 'hexagon-plugin' }); }
+        // Registers via the CLASS form; cleanup must derive the type string.
+        async onActivate() { this.registerShape(Hexagon); }
+    }
+
+    const plugin = new HexPlugin();
+    manager.register(plugin);
+    await manager.activate('hexagon-plugin');
+    assert(ShapeRegistry.isRegistered('hexagon-test'), 'class-form shape registered on activate');
+
+    await manager.deactivate('hexagon-plugin');
+    assert(!ShapeRegistry.isRegistered('hexagon-test'), 'class-form shape unregistered on deactivate');
 });

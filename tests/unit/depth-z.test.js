@@ -10,26 +10,15 @@ import { migrate } from '../../src/persistence/Migrations.js';
 import { ParameterBinding } from '../../src/models/Binding.js';
 import { Parameter } from '../../src/models/Parameter.js';
 
-test('every shape has depth=3, z=0, tilt=0 by default, all bindable', () => {
+test('every shape has bindable depth=3 and z=0 by default', () => {
     for (const type of ShapeRegistry.getAvailableTypes()) {
         const shape = ShapeRegistry.create(type, { x: 0, y: 0 }, {});
         assertEqual(shape.depth, 3, `${type} depth`);
         assertEqual(shape.z, 0, `${type} z`);
-        assertEqual(shape.tilt, 0, `${type} tilt`);
         const bindable = shape.getBindableProperties();
         assert(bindable.includes('depth'), `${type} depth bindable`);
         assert(bindable.includes('z'), `${type} z bindable`);
-        assert(bindable.includes('tilt'), `${type} tilt bindable`);
     }
-});
-
-test('tilt: omitted from JSON at default, written when set, round-trips', () => {
-    const rect = ShapeRegistry.create('rectangle', { x: 0, y: 0 }, {});
-    assert(!('tilt' in rect.toJSON()), 'tilt omitted at default');
-    rect.tilt = 90;
-    const json = rect.toJSON();
-    assertEqual(json.tilt, 90);
-    assertEqual(ShapeRegistry.fromJSON(json).tilt, 90, 'tilt survives round-trip');
 });
 
 test('depth/z omitted from JSON at defaults, written when set', () => {
@@ -88,48 +77,15 @@ test('migrate: pre-2.0.0 per-shape thickness (geometry) is left untouched', () =
     assert(!('depth' in migrated.tabs[0].shapes[0]), 'no depth injected');
 });
 
-test('AQUI: depth:, z:, tilt: flow through as ordinary shape params', () => {
+test('AQUI: depth: and z: flow through as ordinary shape params', () => {
     ShapeRegistry.resetIdCounters();
     const scene = new SceneState();
     const runner = new CodeRunner({ shapeStore: scene.shapeStore, parameterStore: scene.parameterStore });
-    const result = runner.run('shape rectangle wall { width: 120 height: 80 depth: 3 z: 40 tilt: 90 }');
+    const result = runner.run('shape rectangle wall { width: 120 height: 80 depth: 3 z: 40 }');
     assert(result.success, result.error);
     const shape = scene.shapeStore.getAll()[0];
     assertEqual(shape.depth, 3);
     assertEqual(shape.z, 40);
-    assertEqual(shape.tilt, 90);
-});
-
-test('facePlane: enum default xz, not bindable, omitted at default, round-trips', () => {
-    const rect = ShapeRegistry.create('rectangle', { x: 0, y: 0 }, {});
-    assertEqual(rect.facePlane, 'xz', 'default face plane');
-    assert(!rect.getBindableProperties().includes('facePlane'), 'facePlane is not a slider');
-    assert(!('facePlane' in rect.toJSON()), 'omitted at default');
-
-    rect.facePlane = 'xy';
-    const json = rect.toJSON();
-    assertEqual(json.facePlane, 'xy');
-    assertEqual(ShapeRegistry.fromJSON(json).facePlane, 'xy', 'round-trips');
-});
-
-test('cutDepth: bindable, default 0, omitted at default, round-trips', () => {
-    const rect = ShapeRegistry.create('rectangle', { x: 0, y: 0 }, {});
-    assertEqual(rect.cutDepth, 0);
-    assert(rect.getBindableProperties().includes('cutDepth'), 'cutDepth is bindable');
-    assert(!('cutDepth' in rect.toJSON()), 'omitted at default');
-    rect.cutDepth = 2;
-    assertEqual(ShapeRegistry.fromJSON(rect.toJSON()).cutDepth, 2);
-});
-
-test('AQUI: facePlane (string) and cutDepth (number) flow through', () => {
-    ShapeRegistry.resetIdCounters();
-    const scene = new SceneState();
-    const runner = new CodeRunner({ shapeStore: scene.shapeStore, parameterStore: scene.parameterStore });
-    const result = runner.run('shape rectangle wall { width: 100 height: 60 depth: 6 facePlane: "xy" cutDepth: 2 }');
-    assert(result.success, result.error);
-    const shape = scene.shapeStore.getAll()[0];
-    assertEqual(shape.facePlane, 'xy');
-    assertEqual(shape.cutDepth, 2);
 });
 
 test('AQUI: depth referencing a param evaluates at creation', () => {

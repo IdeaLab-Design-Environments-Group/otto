@@ -59,11 +59,11 @@ export const COMMON_SCHEMA = {
         step: 1
     },
     // ── 2.5D properties (Otto is a 2.5D parametric environment) ──────────
-    // depth = extrusion thickness of the piece; z = elevation of its base
+    // depth = material thickness of the piece; z = elevation of its base
     // off the work plane. Both are bindable (drive them from parameters like
     // any other dimension) and flow through the whole stack automatically:
     // Properties Panel rows, serialization, AQUI `depth:`/`z:` params, the
-    // Blocks generic prop blocks, and the 3D viewport's ExtrudeGeometry.
+    // Blocks generic property blocks, and the 2D depth/elevation presentation.
     // z also determines 2D paint order (higher z paints on top).
     depth: {
         type: 'number',
@@ -80,49 +80,6 @@ export const COMMON_SCHEMA = {
         bindable: true,
         omitIfDefault: true,
         label: 'Elevation',
-        unit: 'mm'
-    },
-    // tilt folds a piece up out of the table plane in the 3D view (0 = lying
-    // flat, the default; 90 = standing vertical). It's how flat panels become
-    // walls and sloped roofs — the assembly instruction, not a change to the
-    // flat cut part, so the 2D canvas still draws the piece flat. Rotation
-    // about the vertical axis (yaw) reuses the existing 2D `rotation`.
-    tilt: {
-        type: 'number',
-        default: 0,
-        bindable: true,
-        omitIfDefault: true,
-        label: 'Tilt',
-        unit: 'deg',
-        step: 1
-    },
-    // facePlane picks which world plane the piece's FLAT face lies in when it
-    // is placed in the 3D view (the extrusion runs perpendicular to it):
-    //   'xz' — lies flat on the table (default, extrude up +Y)
-    //   'xy' — stands vertical facing front (extrude along Z)
-    //   'yz' — stands vertical facing the side (extrude along X)
-    // A quick base-orientation knob that composes with tilt (fine folding),
-    // yaw (2D rotation), and z (elevation).
-    facePlane: {
-        type: 'enum',
-        default: 'xz',
-        options: ['xz', 'xy', 'yz'],
-        optionLabels: { xz: 'Flat (XZ)', xy: 'Front (XY)', yz: 'Side (YZ)' },
-        bindable: false,
-        omitIfDefault: true,
-        label: 'Face plane'
-    },
-    // cutDepth controls how deep a piece's cut/difference features (female
-    // joinery pockets, and — once multi-contour paths land — boolean-difference
-    // holes) go THROUGH the material in the 3D view. 0 = cut all the way
-    // through (default); a value < depth makes a blind pocket that deep.
-    cutDepth: {
-        type: 'number',
-        default: 0,
-        bindable: true,
-        min: 0,
-        omitIfDefault: true,
-        label: 'Cut depth',
         unit: 'mm'
     }
 };

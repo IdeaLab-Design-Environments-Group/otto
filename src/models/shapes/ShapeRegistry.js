@@ -1,7 +1,7 @@
 /**
  * ShapeRegistry using Registry Pattern
  * Creates shape instances based on type with dynamic registration support
- * 
+ *
  * Benefits:
  * - Open/Closed Principle: Add new shapes without modifying registry code
  * - Runtime registration: Register shapes dynamically
@@ -80,15 +80,15 @@ export class ShapeRegistry {
             (json) => ShapeClass.fromJSON(json)
         );
     }
-    
+
     /**
      * Register a new shape type (Registry Pattern)
      * @param {string} type - Shape type identifier
      * @param {Function} createFunction - Function(id, position, options) => Shape
      * @param {Function} fromJSONFunction - Static fromJSON method
-     * 
+     *
      * Example:
-     * ShapeRegistry.register('triangle', 
+     * ShapeRegistry.register('triangle',
      *     (id, pos, opts) => new Triangle(id, pos, opts.x, opts.y, opts.size),
      *     Triangle.fromJSON
      * );
@@ -103,7 +103,7 @@ export class ShapeRegistry {
         if (typeof fromJSONFunction !== 'function') {
             throw new Error('fromJSONFunction must be a function');
         }
-        
+
         const normalizedType = type.toLowerCase();
         this.#registry.set(normalizedType, new ShapeRegistryEntry(
             createFunction,
@@ -126,25 +126,29 @@ export class ShapeRegistry {
         if (!this.#initialized) return; // stay quiet during bulk static setup
         EventBus.emit(EVENTS.SHAPE_TYPE_REGISTERED, { type });
     }
-    
+
     /**
-     * Unregister a shape type (useful for testing)
-     * @param {string} type 
+     * Unregister a shape type (useful for testing and plugin cleanup).
+     * Accepts a type string or a Shape subclass (symmetric with
+     * {@link ShapeRegistry.registerClass}); ignores anything else rather than
+     * throwing, so best-effort cleanup paths stay robust.
+     * @param {string|Function} type
      */
     static unregister(type) {
-        const normalizedType = type.toLowerCase();
-        this.#registry.delete(normalizedType);
+        const typeName = (typeof type === 'function' && type.type) ? type.type : type;
+        if (!typeName || typeof typeName !== 'string') return;
+        this.#registry.delete(typeName.toLowerCase());
     }
-    
+
     /**
      * Check if a shape type is registered
-     * @param {string} type 
+     * @param {string} type
      * @returns {boolean}
      */
     static isRegistered(type) {
         return this.#registry.has(type.toLowerCase());
     }
-    
+
     /**
      * Get available shape types
      * @returns {Array<string>}
@@ -152,11 +156,11 @@ export class ShapeRegistry {
     static getAvailableTypes() {
         return Array.from(this.#registry.keys());
     }
-    
+
     /**
      * Create a shape by type (Registry Pattern - no switch statement!)
-     * @param {string} type 
-     * @param {Object} position 
+     * @param {string} type
+     * @param {Object} position
      * @param {Object} options - Additional options for shape creation
      * @param {ShapeStore} shapeStore - Optional shape store to check existing IDs
      * @returns {Shape}
@@ -164,7 +168,7 @@ export class ShapeRegistry {
     static create(type, position = { x: 0, y: 0 }, options = {}, shapeStore = null) {
         const normalizedType = type.toLowerCase();
         const entry = this.#registry.get(normalizedType);
-        
+
         if (!entry) {
             const available = Array.from(this.#registry.keys()).join(', ');
             throw new Error(
@@ -173,11 +177,11 @@ export class ShapeRegistry {
                 `Use ShapeRegistry.register() to add new types.`
             );
         }
-        
+
         const id = options.id || this.generateId(normalizedType, shapeStore);
         return entry.create(id, position, options);
     }
-    
+
     /**
      * Create shape from JSON (Registry Pattern - no switch statement!)
      * @param {Object} json
@@ -216,25 +220,25 @@ export class ShapeRegistry {
 
         return shape;
     }
-    
+
     /**
      * Generate a readable ID for a shape (e.g., "Circle 1", "Rectangle 2")
-     * @param {string} type 
+     * @param {string} type
      * @param {ShapeStore} shapeStore - Optional shape store to check existing IDs
      * @returns {string}
      */
     static generateId(type, shapeStore = null) {
         // Capitalize first letter of type
         const capitalizedType = type.charAt(0).toUpperCase() + type.slice(1);
-        
+
         // Get current counter for this type
         let counter = this.#idCounters.get(type) || 0;
-        
+
         // If shapeStore is provided, find the highest number for this type
         if (shapeStore && typeof shapeStore.getAll === 'function') {
             const allShapes = shapeStore.getAll();
             const existingNumbers = [];
-            
+
             allShapes.forEach(shape => {
                 if (shape.type === type) {
                     // Try to extract number from existing ID
@@ -244,19 +248,19 @@ export class ShapeRegistry {
                     }
                 }
             });
-            
+
             if (existingNumbers.length > 0) {
                 counter = Math.max(...existingNumbers);
             }
         }
-        
+
         // Increment counter
         counter++;
         this.#idCounters.set(type, counter);
-        
+
         return `${capitalizedType} ${counter}`;
     }
-    
+
     /**
      * Reset ID counters (useful for testing or when clearing all shapes)
      */

@@ -1,10 +1,10 @@
 /**
  * Main Entry Point
- * 
+ *
  * This is the application bootstrap file that initializes the entire Nova Otto
  * parametric 2D design system. It sets up the Application instance, connects
  * UI components, and exposes global APIs for plugins and console usage.
- * 
+ *
  * @module main
  */
 
@@ -21,10 +21,10 @@ let app;
 
 /**
  * DOMContentLoaded Event Handler
- * 
+ *
  * Initializes the application once the DOM is fully loaded. This ensures all
  * required HTML elements are available before creating UI components.
- * 
+ *
  * Sets up:
  * - Application instance with all managers and components
  * - Geometry library initialization (PathKit if available)
@@ -33,7 +33,7 @@ let app;
  */
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Nova Otto - Parametric 2D Design System');
-    
+
     try {
         // Create and initialize application (Phase 9)
         // This sets up all core managers, UI components, and connects them
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Global exports for external access
             window.OttoGeometry = Geometry; // Geometry utilities (Vec, Path, etc.)
             window.OttoCodeRunner = app.codeRunner; // Code execution engine
-            
+
             // Initialize PathKit if available (for advanced path operations)
             // PathKit provides high-performance path manipulation capabilities
             if (window.PathKitInit || window.PathKit) {
@@ -57,10 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         }
-        
+
         // Setup UI buttons - connects toolbar buttons to application methods
         setupToolbarButtons(app);
-        
+
         console.log('Application initialized successfully');
         console.log('Phases 1-9 fully implemented and initialized');
         console.log('Keyboard shortcuts:');
@@ -79,11 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /**
  * Setup Toolbar Button Event Listeners
- * 
+ *
  * Connects all toolbar buttons to their corresponding application methods.
  * This includes file operations (save/load/export/import), undo/redo,
  * and tool mode toggles.
- * 
+ *
  * @param {Application} app - The application instance
  */
 function setupToolbarButtons(app) {
@@ -94,7 +94,7 @@ function setupToolbarButtons(app) {
             app.save();
         });
     }
-    
+
     // Load button - loads previously saved scene from browser storage
     const btnLoad = document.getElementById('btn-load');
     if (btnLoad) {
@@ -107,7 +107,7 @@ function setupToolbarButtons(app) {
             }
         });
     }
-    
+
     // Export button - exports current scene to .pds file for file system storage
     const btnExport = document.getElementById('btn-export');
     if (btnExport) {
@@ -115,7 +115,7 @@ function setupToolbarButtons(app) {
             app.exportFile();
         });
     }
-    
+
     // Import button - imports a .pds file from file system
     const btnImport = document.getElementById('btn-import');
     if (btnImport) {
@@ -129,7 +129,7 @@ function setupToolbarButtons(app) {
     if (btnImportStl) {
         btnImportStl.addEventListener('click', () => app.importSTL());
     }
-    
+
     // Undo button - reverts the last command on the active tab's history.
     const btnUndo = document.getElementById('btn-undo');
     if (btnUndo) {
@@ -175,14 +175,6 @@ function setupToolbarButtons(app) {
         });
     }
 
-    // 3D button - toggles the embedded live 3D viewport (lazy-loaded).
-    const btnAssembly = document.getElementById('btn-assembly');
-    if (btnAssembly) {
-        btnAssembly.addEventListener('click', async () => {
-            const shown = await app.toggle3D();
-            btnAssembly.classList.toggle('active', shown);
-        });
-    }
 }
 
 export { app };

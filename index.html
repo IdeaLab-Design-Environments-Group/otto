@@ -16,15 +16,6 @@
     <!-- ClipperLib for boolean operations -->
     <script src="https://cdn.jsdelivr.net/gh/junmer/clipper-lib@master/clipper.js"></script>
 
-    <!-- Three.js for the embedded 3D viewport (loaded lazily on first open) -->
-    <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-      }
-    }
-    </script>
 </head>
 <body>
     <a href="#canvas-container" class="skip-link">Skip to canvas</a>
@@ -87,7 +78,7 @@
         <!-- Center Canvas Area -->
         <div id="canvas-container" class="canvas-container">
             <canvas id="main-canvas" tabindex="0" role="application"
-                    aria-label="Design canvas. Use arrow keys to move the selected shape, Tab to cycle shapes, Delete to remove.">
+                    aria-label="Design canvas. Drag with one finger to pan and pinch with two fingers to zoom. Use arrow keys to move the selected shape, Tab to cycle shapes, Delete to remove.">
             </canvas>
             <!-- Visually-hidden live region announcing selection changes -->
             <div id="canvas-status" role="status" aria-live="polite" class="visually-hidden"></div>

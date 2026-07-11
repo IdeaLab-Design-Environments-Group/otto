@@ -23,6 +23,7 @@ export class PluginManager {
         // Plugin storage
         this._plugins = new Map(); // Map<id, Plugin>
         this._activePlugins = new Set(); // Set<id>
+        this._activating = new Set(); // Set<id> currently mid-activation (cycle guard)
 
         // Create PluginAPI instance
         this._api = new PluginAPI(options);
@@ -133,6 +134,14 @@ export class PluginManager {
             return true;
         }
 
+        // Cycle guard: re-entering activation for a plugin that is already
+        // partway through activating means its dependency graph has a cycle.
+        // Bail out gracefully instead of recursing until the stack overflows.
+        if (this._activating.has(pluginId)) {
+            console.error(`Circular dependency detected while activating plugin ${pluginId}`);
+            return false;
+        }
+
         // Check dependencies
         const missingDeps = this.checkDependencies(plugin);
         if (missingDeps.length > 0) {
@@ -140,24 +149,27 @@ export class PluginManager {
             return false;
         }
 
-        // Activate dependencies first
-        for (const depId of plugin.dependencies) {
-            if (!this._activePlugins.has(depId)) {
-                const success = await this.activate(depId);
-                if (!success) {
-                    console.error(`Failed to activate dependency ${depId} for plugin ${pluginId}`);
-                    return false;
+        this._activating.add(pluginId);
+        try {
+            // Activate dependencies first
+            for (const depId of plugin.dependencies) {
+                if (!this._activePlugins.has(depId)) {
+                    const success = await this.activate(depId);
+                    if (!success) {
+                        console.error(`Failed to activate dependency ${depId} for plugin ${pluginId}`);
+                        return false;
+                    }
                 }
             }
-        }
 
-        try {
             await plugin.activate(this._api);
             this._activePlugins.add(pluginId);
             return true;
         } catch (error) {
             console.error(`Failed to activate plugin ${pluginId}:`, error);
             return false;
+        } finally {
+            this._activating.delete(pluginId);
         }
     }
 
@@ -181,8 +193,9 @@ export class PluginManager {
         // Check if other plugins depend on this one
         const dependents = this.getDependents(pluginId);
         if (dependents.length > 0) {
-            console.warn(`Cannot deactivate ${pluginId}: required by ${dependents.join(', ')}`);
-            // Deactivate dependents first
+            // Cascade: dependents must go down first so none is left holding a
+            // reference to a deactivated plugin.
+            console.warn(`Deactivating ${pluginId} cascades to dependents: ${dependents.join(', ')}`);
             for (const depId of dependents) {
                 await this.deactivate(depId);
             }
