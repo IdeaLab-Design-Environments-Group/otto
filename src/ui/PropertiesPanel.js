@@ -119,13 +119,14 @@ export class PropertiesPanel extends Component {
         }
 
         // Render all shapes in compact layers format
+        this.syncDisplayedSelection(allShapes);
         this.renderLayersList(allShapes);
 
         // Below the list, show editors for the current selection: every
         // bindable property (x/y/size/depth/z/tilt/cutDepth…) plus the
         // Face plane dropdown. Without this the panel is just a shape list —
         // there is nowhere to change these values.
-        const selectedIds = Array.from(this.shapeStore.getSelectedIds());
+        const selectedIds = Array.from(this.selectedShapeIds);
         if (selectedIds.length > 1) {
             const divider = this.createElement('div', { class: 'properties-separator' });
             this.container.appendChild(divider);
@@ -138,6 +139,36 @@ export class PropertiesPanel extends Component {
                 this.renderProperties(this.shapeStore.get(shape.id));
             }
         }
+    }
+
+    /**
+     * Keep the panel useful even when selection events arrive late or a new
+     * scene has exactly one shape. The store remains authoritative when it has
+     * a selected id; otherwise we display the last known shape, falling back to
+     * the sole shape in the scene.
+     * @param {Array<Shape>} allShapes
+     */
+    syncDisplayedSelection(allShapes) {
+        const storeSelectedIds = this.shapeStore.getSelectedIds();
+        if (storeSelectedIds.size > 0) {
+            this.selectedShapeIds = storeSelectedIds;
+            this.selectedShape = this.shapeStore.getSelected() || this.shapeStore.get(Array.from(storeSelectedIds)[0]);
+            return;
+        }
+
+        if (this.selectedShape && this.shapeStore.get(this.selectedShape.id)) {
+            this.selectedShapeIds = new Set([this.selectedShape.id]);
+            return;
+        }
+
+        if (allShapes.length === 1) {
+            this.selectedShape = allShapes[0];
+            this.selectedShapeIds = new Set([allShapes[0].id]);
+            return;
+        }
+
+        this.selectedShape = null;
+        this.selectedShapeIds.clear();
     }
 
     /**
