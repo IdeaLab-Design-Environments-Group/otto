@@ -6,6 +6,7 @@
  * app stay agnostic about where the key comes from.
  */
 import { GeminiProvider } from './GeminiProvider.js';
+import { FabricationCoach } from './FabricationCoach.js';
 import { LLM_CONFIG as EXAMPLE_CONFIG } from './llm.config.example.js';
 
 /** localStorage key for a runtime BYOK override of the API key. */
@@ -49,4 +50,26 @@ export async function createProvider() {
     return new GeminiProvider(config);
 }
 
-export { GeminiProvider };
+/**
+ * Build a ready-to-use Fabrication Coach over the resolved provider.
+ * @returns {Promise<FabricationCoach>}
+ */
+export async function createCoach() {
+    return new FabricationCoach(await createProvider());
+}
+
+/**
+ * Persist a runtime BYOK API key so the coach works without a local config
+ * file. Passing an empty string clears the override.
+ * @param {string} key
+ */
+export function saveApiKey(key) {
+    try {
+        if (key) globalThis.localStorage?.setItem(API_KEY_STORAGE_KEY, key);
+        else globalThis.localStorage?.removeItem(API_KEY_STORAGE_KEY);
+    } catch {
+        // localStorage may be unavailable (e.g. private mode / Node) — ignore.
+    }
+}
+
+export { GeminiProvider, FabricationCoach };
