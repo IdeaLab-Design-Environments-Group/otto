@@ -11,5 +11,6 @@ export const TEST_MODULES = [
     './unit/depth-z.test.js',
     './unit/plugin-lifecycle.test.js',
     './unit/stl-import.test.js',
-    './unit/coach.test.js'
+    './unit/coach.test.js',
+    './unit/joinery.test.js'
 ];

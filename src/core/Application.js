@@ -85,7 +85,7 @@ export class Application {
         const canvasElement = document.getElementById('main-canvas');
         const parametersMenuContainer = document.getElementById('parameters-menu-container');
         const propertiesPanelContainer = document.getElementById('properties-panel-container');
-        const coachPanelContainer = document.getElementById('coach-panel-container');
+        const coachButton = document.getElementById('btn-ai-coach');
         const zoomControlsContainer = document.getElementById('zoom-controls-container');
         const blocklyContainer = document.getElementById('blockly-container');
         const codeEditorContainer = document.getElementById('code-editor-container');
@@ -196,10 +196,12 @@ export class Application {
         );
         this.propertiesPanel.mount();
 
-        // AI Fabrication Coach: reads the active scene through SceneContext and
-        // the current AQUI source from the code editor (optional container).
-        if (coachPanelContainer) {
-            this.coachPanel = new CoachPanel(coachPanelContainer, this.context, {
+        // AI Fabrication Coach: a top-right toolbar button toggles a flyover
+        // that reads the active scene through SceneContext and the current AQUI
+        // source from the code editor.
+        if (coachButton) {
+            this.coachPanel = new CoachPanel(this.context, {
+                button: coachButton,
                 getCode: () => this.codeEditor?.editor?.getValue?.() ?? ''
             });
             this.coachPanel.mount();

@@ -1652,21 +1652,21 @@ body.dark-theme .canvas-container {
     z-index: 12000;
     background: var(--bg-white);
     border: 1px solid var(--border-medium);
-    border-radius: 6px;
-    box-shadow: var(--shadow-md);
-    padding: 10px 12px;
-    gap: 14px;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+    padding: 14px;
+    gap: 16px;
     grid-auto-flow: column;
-    grid-template-columns: 200px;
-    align-items: start;
+    grid-template-columns: 210px;
+    align-items: stretch;
     color: rgb(15, 23, 42);
-    font-family: monospace;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     font-size: 13px;
-    min-width: 200px;
+    min-width: 210px;
 }
 
 .edge-joinery-menu.has-submenu {
-    grid-template-columns: 200px 240px;
+    grid-template-columns: 210px 250px;
 }
 
 .edge-joinery-menu.is-open {
@@ -1677,38 +1677,50 @@ body.dark-theme .canvas-container {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    min-width: 190px;
+    min-width: 200px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 2px;
 }
 
 .edge-joinery-menu__item {
     text-align: left;
     width: 100%;
-    padding: 6px 10px;
+    padding: 9px 12px;
     background: var(--bg-white);
     color: rgb(15, 23, 42);
     border: 1px solid var(--border-light);
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 13px;
     font-weight: 600;
     margin-bottom: 0;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .edge-joinery-menu__item:hover {
     background: var(--sidebar-yellow-hover);
+    border-color: var(--border-medium);
+}
+
+.edge-joinery-menu__item:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: 1px;
 }
 
 .edge-joinery-menu__item.is-active {
     background: var(--nav-blue);
     color: var(--text-light);
     border-color: var(--nav-blue);
+    box-shadow: inset 3px 0 0 var(--accent-orange);
 }
 
 .edge-joinery-menu__submenu {
     display: none;
     flex-direction: column;
-    gap: 8px;
-    min-width: 210px;
-    padding-left: 12px;
+    gap: 10px;
+    min-width: 220px;
+    padding-left: 16px;
     border-left: 1px solid var(--border-light);
     color: rgb(15, 23, 42);
 }
@@ -1718,9 +1730,17 @@ body.dark-theme .canvas-container {
 }
 
 .edge-joinery-menu__title {
-    font-weight: 600;
+    font-weight: 700;
     color: var(--nav-blue);
     font-size: 14px;
+    letter-spacing: 0.2px;
+}
+
+.edge-joinery-menu__desc {
+    margin: -4px 0 2px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--text-muted);
 }
 
 .edge-joinery-menu__field {
@@ -1731,17 +1751,49 @@ body.dark-theme .canvas-container {
 
 .edge-joinery-menu__label {
     font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
     color: var(--text-muted);
 }
 
 .edge-joinery-menu__field input {
     width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: monospace;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+.edge-joinery-menu__field input:focus {
+    outline: none;
+    border-color: var(--focus-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
 }
 
 .edge-joinery-menu__actions {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     justify-content: flex-end;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light);
+}
+
+.edge-joinery-menu__apply,
+.edge-joinery-menu__cancel {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-light);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
 }
 
 .edge-joinery-menu__apply {
@@ -1756,19 +1808,24 @@ body.dark-theme .canvas-container {
     background: var(--nav-blue);
 }
 
+.edge-joinery-menu__cancel:hover {
+    background: var(--nav-blue-hover);
+}
+
 .edge-joinery-menu__align-buttons {
     display: flex;
-    gap: 4px;
+    gap: 6px;
 }
 
 .edge-joinery-menu__align-btn {
     flex: 1;
-    padding: 5px 8px;
-    font-size: 11px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
     background: var(--bg-white);
     color: rgb(15, 23, 42);
-    border: 1px solid var(--border-light);
-    border-radius: 3px;
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
@@ -1928,4 +1985,86 @@ body.dark-theme .canvas-container {
 .coach-key-help {
     font-size: 11px;
     color: var(--link-color);
+}
+
+/* --- AI toolbar button (top-right) + flyover --- */
+
+.toolbar-btn-ai {
+    margin-left: auto; /* push to the far right of the top bar */
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.toolbar-btn-ai:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.toolbar-btn-ai.active {
+    background: var(--accent-orange);
+    border-color: var(--accent-orange);
+    color: var(--text-light);
+}
+
+.coach-flyover {
+    position: fixed;
+    top: 56px;
+    right: 12px;
+    width: 340px;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 72px);
+    display: none;
+    flex-direction: column;
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.coach-flyover.is-open {
+    display: flex;
+}
+
+.coach-flyover__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: var(--nav-blue);
+    color: var(--text-light);
+}
+
+.coach-flyover__title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-light);
+}
+
+.coach-flyover__close {
+    background: transparent;
+    border: none;
+    color: var(--text-light);
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+}
+
+.coach-flyover__close:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.coach-flyover__close:focus-visible {
+    outline: 2px solid var(--text-light);
+    outline-offset: 1px;
+}
+
+.coach-flyover__body {
+    padding: 14px;
+    overflow-y: auto;
 }

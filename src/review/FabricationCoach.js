@@ -16,6 +16,7 @@
  * fabricated — the same spirit as the classroom AI-teacher feedback loop.
  */
 import { buildSceneSummary, sceneSummaryToText } from './SceneSummary.js';
+import { runFabricationRules } from './FabricationRules.js';
 
 /** Allowed finding severities, most to least urgent. Used to validate + sort. */
 export const SEVERITIES = ['error', 'warning', 'info', 'praise'];
@@ -30,13 +31,24 @@ export const SYSTEM_INSTRUCTION = [
     '',
     'Give concise, specific, encouraging coaching a teacher would give before',
     'the student sends the design to a machine. Prioritise:',
-    '  1. Fabrication problems: features thinner than typical material,',
-    '     joints/tabs that will be loose or fragile, pieces with no depth,',
-    '     dimensions that seem physically implausible.',
+    '  1. Laser-cutting fabrication: think about kerf (~0.2 mm of material is',
+    '     removed along every cut, so slots cut to the exact tab width end up',
+    '     loose — undersize them for a press fit); tabs/fingers narrower than',
+    '     the material thickness that will snap; slots whose width does not',
+    '     match a mating piece\'s depth; acute internal angles and tiny holes',
+    '     that char or burn away; features smaller than the kerf; open paths',
+    '     that will not cut a closed part; whether the layout fits the bed and',
+    '     leaves spacing between parts for nesting; and engrave-vs-cut intent.',
     '  2. Parametric quality: hard-coded numbers that should be parameters,',
-    '     repeated values that should share one parameter, missing relationships',
-    '     between pieces that ought to move together.',
-    '  3. "What could go wrong" when this is actually cut or printed.',
+    '     repeated values that should share one parameter, mating dimensions',
+    '     (slot width vs material depth) that should be linked so they stay',
+    '     consistent when a parameter changes.',
+    '  3. "What could go wrong" when this is actually cut — the real failure',
+    '     the student would only discover at the machine.',
+    '',
+    'Some deterministic laser checks (bed fit, tiny parts, material thickness,',
+    'kerf) are already reported to the student separately, so do NOT just repeat',
+    'them — add the judgement those simple checks cannot make.',
     '',
     'Base every point on the numbers you are given — never invent shapes or',
     'values that are not in the description. If the design is genuinely sound,',
@@ -58,9 +70,13 @@ const OUTPUT_CONTRACT = [
 export class FabricationCoach {
     /**
      * @param {import('./GeminiProvider.js').GeminiProvider} provider
+     * @param {Object} [opts]
+     * @param {Partial<import('./FabricationRules.js').DEFAULT_LASER>} [opts.laser]
+     *   Laser bed / material overrides forwarded to the deterministic rules.
      */
-    constructor(provider) {
+    constructor(provider, { laser = {} } = {}) {
         this.provider = provider;
+        this.laser = laser;
     }
 
     /** @returns {boolean} True when the underlying provider has a real key. */
@@ -71,9 +87,15 @@ export class FabricationCoach {
     /**
      * Review a scene and return validated findings.
      *
+     * The deterministic laser-cutting rules always run (offline, free) and lead
+     * the results. If a Gemini key is configured, the model's open-ended
+     * judgement is appended; if the model is unavailable or errors, the local
+     * findings still stand — this method does not throw for LLM problems, so
+     * the student always gets fabrication feedback.
+     *
      * @param {Object} sceneInput  Passed straight to {@link buildSceneSummary}
      *   (`{ shapes, parameters, code }`).
-     * @returns {Promise<{findings: Array, summary: Object}>}
+     * @returns {Promise<{findings: Array, summary: Object, usedAI: boolean}>}
      */
     async review(sceneInput) {
         const summary = buildSceneSummary(sceneInput);
@@ -82,6 +104,7 @@ export class FabricationCoach {
             // Nothing on the canvas — answer locally instead of spending a call.
             return {
                 summary,
+                usedAI: false,
                 findings: [{
                     severity: 'info',
                     title: 'Nothing to review yet',
@@ -92,15 +115,64 @@ export class FabricationCoach {
             };
         }
 
-        const prompt = `${sceneSummaryToText(summary)}\n\n${OUTPUT_CONTRACT}`;
-        const raw = await this.provider.generateJSON(prompt, {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            temperature: 0.3,
-            maxOutputTokens: 1024
-        });
+        const localFindings = runFabricationRules(summary, this.laser);
 
-        return { summary, findings: parseFindings(raw) };
+        if (!this.isConfigured()) {
+            // No key: deliver the deterministic laser checks plus a nudge that
+            // AI judgement is available once a key is added.
+            return {
+                summary,
+                usedAI: false,
+                findings: [...localFindings, {
+                    severity: 'info',
+                    title: 'Add a Gemini key for AI design review',
+                    detail: 'The checks above are computed locally. Paste a free '
+                        + 'Gemini API key below to also get open-ended coaching.',
+                    suggestion: ''
+                }]
+            };
+        }
+
+        const prompt = `${sceneSummaryToText(summary)}\n\n${OUTPUT_CONTRACT}`;
+        try {
+            const raw = await this.provider.generateJSON(prompt, {
+                systemInstruction: SYSTEM_INSTRUCTION,
+                temperature: 0.3,
+                maxOutputTokens: 1024
+            });
+            return {
+                summary,
+                usedAI: true,
+                findings: mergeFindings(localFindings, parseFindings(raw))
+            };
+        } catch (err) {
+            // The local rules are still valuable — surface them plus the error.
+            return {
+                summary,
+                usedAI: false,
+                findings: [...localFindings, {
+                    severity: 'warning',
+                    title: 'AI review unavailable',
+                    detail: err?.message || 'The AI review could not be completed.',
+                    suggestion: ''
+                }]
+            };
+        }
     }
+}
+
+/**
+ * Merge deterministic rule findings with LLM findings: rules first (they are
+ * trustworthy and grounded), then the model's, with the whole list re-sorted
+ * by severity. Kept as a small pure helper so ordering is testable.
+ * @param {Array} ruleFindings
+ * @param {Array} llmFindings
+ * @returns {Array}
+ */
+export function mergeFindings(ruleFindings, llmFindings) {
+    const merged = [...ruleFindings, ...llmFindings];
+    merged.sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity));
+    return merged;
 }
 
 /**

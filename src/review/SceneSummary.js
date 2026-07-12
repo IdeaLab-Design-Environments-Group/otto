@@ -69,6 +69,10 @@ export function buildSceneSummary({ shapes = [], parameters = [], code = '' } = 
         return { name: p.name, value: tidy(p.getValue ? p.getValue() : p.value), min, max };
     });
 
+    // Accumulate the overall scene extent (world-space bounding box in mm) as
+    // we walk shapes, so the fabrication rules can check laser-bed fit.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
     const shapeSummary = shapes.map((shape) => {
         const bindable = typeof shape.getBindableProperties === 'function'
             ? shape.getBindableProperties()
@@ -80,8 +84,26 @@ export function buildSceneSummary({ shapes = [], parameters = [], code = '' } = 
             if (bindingDesc) entry.boundTo = bindingDesc;
             props[key] = entry;
         }
-        return { id: shape.id, type: shape.type, props };
+
+        let bounds = null;
+        if (typeof shape.getBounds === 'function') {
+            const b = shape.getBounds();
+            if (b && Number.isFinite(b.width) && Number.isFinite(b.height)) {
+                bounds = { w: tidy(b.width), h: tidy(b.height) };
+                minX = Math.min(minX, b.x);
+                minY = Math.min(minY, b.y);
+                maxX = Math.max(maxX, b.x + b.width);
+                maxY = Math.max(maxY, b.y + b.height);
+            }
+        }
+
+        const depth = Number.isFinite(shape.depth) ? tidy(shape.depth) : null;
+        return { id: shape.id, type: shape.type, props, bounds, depth };
     });
+
+    const extent = Number.isFinite(minX)
+        ? { w: tidy(maxX - minX), h: tidy(maxY - minY) }
+        : null;
 
     const trimmedCode = typeof code === 'string' ? code.trim() : '';
 
@@ -89,6 +111,7 @@ export function buildSceneSummary({ shapes = [], parameters = [], code = '' } = 
         unit: SCENE_UNIT,
         parameters: paramSummary,
         shapes: shapeSummary,
+        extent,
         code: trimmedCode || null,
         counts: { shapes: shapeSummary.length, parameters: paramSummary.length }
     };
@@ -116,6 +139,10 @@ export function sceneSummaryToText(summary) {
         }
     }
 
+    if (summary.extent) {
+        lines.push('', `Overall extent: ${summary.extent.w} × ${summary.extent.h} mm`);
+    }
+
     lines.push('', `Shapes (${summary.counts.shapes}):`);
     if (summary.shapes.length === 0) {
         lines.push('  (none)');
@@ -125,7 +152,8 @@ export function sceneSummaryToText(summary) {
                 const bound = entry.boundTo ? ` (${entry.boundTo})` : '';
                 return `${key}=${entry.value}${bound}`;
             });
-            lines.push(`  ${s.type} "${s.id}": ${parts.join(', ')}`);
+            const size = s.bounds ? ` | ${s.bounds.w}×${s.bounds.h}mm footprint` : '';
+            lines.push(`  ${s.type} "${s.id}": ${parts.join(', ')}${size}`);
         }
     }
 

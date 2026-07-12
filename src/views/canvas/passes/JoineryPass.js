@@ -1,10 +1,14 @@
 /**
- * @fileoverview JoineryPass — draws finger-joint / dovetail previews on edges
- * that carry joinery metadata, plus the interactive depth handle shown while
- * the owning shape is selected.
+ * @fileoverview JoineryPass — renders finger-joint / dovetail joinery by
+ * MODIFYING the affected edge: it erases the straight edge painted by ShapesPass
+ * and redraws it as the toothed cut profile (tabs on the boundary, notches cut
+ * inward), in the shape's own black stroke — not as a coloured overlay. It also
+ * draws the interactive depth handle while the owning shape is selected.
  *
  * Ported from CanvasRenderer.renderEdgeJoinery(), renderFingerJoinery(), and
- * renderJoineryHandles().
+ * renderJoineryHandles(). Tab count/depth/profile maths lives in the pure
+ * {@link module:models/joinery} module (`jointRenderPlan`); this pass only
+ * turns a plan into strokes.
  *
  * This pass is the ONE sanctioned exception to "passes don't write": it
  * REBUILDS `frame.interaction.joineryHandles` (the hit-test cache) as it
@@ -12,6 +16,7 @@
  *
  * @module views/canvas/passes/JoineryPass
  */
+import { jointRenderPlan } from '../../../models/joinery.js';
 
 export class JoineryPass {
     /**
@@ -40,18 +45,42 @@ export class JoineryPass {
             if (!edge.isLinear || !edge.isLinear()) return;
 
             let bounds = null;
+            let rotation = 0;
             if (edge.shapeId) {
                 const shape = shapeStore.get(edge.shapeId);
                 if (shape) {
                     const resolved = frame.bindingResolver.resolveShape(shape);
                     if (resolved && typeof resolved.getBounds === 'function') {
                         bounds = resolved.getBounds();
+                        rotation = Number(resolved.rotation) || 0;
                     }
                 }
             }
 
-            this.renderFingerJoinery(frame, edge, joinery, bounds);
+            this.renderFingerJoinery(frame, edge, joinery, bounds, rotation);
         });
+    }
+
+    /**
+     * Rotate a point about a centre by `rotationDeg` degrees, matching the
+     * canvas `ctx.rotate` convention (y-down). Returns a fresh point; a null
+     * centre or zero rotation is an identity copy.
+     * @param {{x:number,y:number}} p
+     * @param {?{x:number,y:number}} center
+     * @param {number} rotationDeg
+     * @returns {{x:number,y:number}}
+     */
+    rotatePoint(p, center, rotationDeg) {
+        if (!center || !rotationDeg) return { x: p.x, y: p.y };
+        const a = (rotationDeg * Math.PI) / 180;
+        const cos = Math.cos(a);
+        const sin = Math.sin(a);
+        const dx = p.x - center.x;
+        const dy = p.y - center.y;
+        return {
+            x: center.x + dx * cos - dy * sin,
+            y: center.y + dx * sin + dy * cos
+        };
     }
 
     /**
@@ -59,12 +88,26 @@ export class JoineryPass {
      * @param {Object} frame
      * @param {import('../../../geometry/edge/index.js').Edge} edge
      * @param {{type: string, thicknessMm: number, fingerCount: number, align?: string}} joinery
+     * @param {?{x:number,y:number,width:number,height:number}} bounds
+     * @param {number} [rotation]  Owning shape's rotation in degrees.
      */
-    renderFingerJoinery(frame, edge, joinery, bounds) {
+    renderFingerJoinery(frame, edge, joinery, bounds, rotation = 0) {
         const { ctx } = frame;
-        const p1 = edge.anchor1?.position;
-        const p2 = edge.anchor2?.position;
-        if (!p1 || !p2) return;
+        const rawP1 = edge.anchor1?.position;
+        const rawP2 = edge.anchor2?.position;
+        if (!rawP1 || !rawP2) return;
+
+        // The shape is painted under a rotation transform about its unrotated
+        // bounds centre (see ShapesPass), but edges come from the *unrotated*
+        // geometry path. Apply the identical rotation to the edge endpoints so
+        // the joint tracks the side it belongs to — both when drawn and when
+        // its handles are hit-tested (handle positions are stored in world
+        // space, so a ctx transform alone would not suffice).
+        const center = bounds
+            ? { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+            : null;
+        const p1 = this.rotatePoint(rawP1, center, rotation);
+        const p2 = this.rotatePoint(rawP2, center, rotation);
 
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
@@ -76,89 +119,110 @@ export class JoineryPass {
         let nx = -uy;
         let ny = ux;
 
-        if (bounds) {
+        // Orient the normal to point OUTWARD (away from the shape centre); the
+        // joint is then cut INWARD from there. The centre is the rotation pivot,
+        // so it is invariant and remains valid after the endpoint rotation.
+        if (center) {
             const midX = (p1.x + p2.x) / 2;
             const midY = (p1.y + p2.y) / 2;
-            const cx = bounds.x + bounds.width / 2;
-            const cy = bounds.y + bounds.height / 2;
-            const vx = midX - cx;
-            const vy = midY - cy;
+            const vx = midX - center.x;
+            const vy = midY - center.y;
             if (vx * nx + vy * ny < 0) {
                 nx = -nx;
                 ny = -ny;
             }
         }
 
-        // Support old 'finger_male', 'male', and new 'finger_joint' type
-        const joineryType = String(joinery.type || '').toLowerCase();
-        const isFingerJoint = joineryType === 'finger_joint' || joineryType === 'male' || joineryType === 'finger_male';
-        const isDovetail = joineryType === 'dovetail';
-        const direction = 1;
+        // Joinery is CUT INTO the panel, not added on top: notches go inward
+        // (toward the centre), so the piece keeps its outer footprint.
+        const direction = -1;
 
-        const thicknessMm = Number(joinery.thicknessMm);
-        const baseDepth = Math.min(Math.max(thicknessMm || 0, 0.5), length * 0.45);
-        const depth = isDovetail
-            ? Math.min(baseDepth * 1.6, length * 0.6)
-            : baseDepth;
-        const preferredWidth = Math.max(depth * 2, 4);
-        const requestedCount = Number(joinery.fingerCount);
-        const count = Number.isFinite(requestedCount) && requestedCount >= 2
-            ? Math.floor(requestedCount)
-            : Math.max(2, Math.floor(length / preferredWidth));
-        const toothWidth = length / count;
+        // Pure planning: profile, depth, count, tooth width, taper (see
+        // models/joinery.js). Keeps this pass to drawing only.
+        const plan = jointRenderPlan(joinery, length);
+        const { depth, toothWidth, startIndex } = plan;
 
-        const strokeColor = '#f97316';
-        const fillColor = 'rgba(249, 115, 22, 0.25)';
+        // Rather than overlay a highlight, the joint MODIFIES the edge: the
+        // straight edge painted by ShapesPass is erased and redrawn as the
+        // toothed profile (tabs on the boundary, notches cut inward). This is
+        // the actual cut line, in the shape's own black stroke.
+        const outline = this.buildToothOutline({ p1, ux, uy, nx, ny, plan });
+        const strokeWidth = 0.8;   // matches ShapesPass shape outline (world units)
 
-        // Alignment: left = first tooth at start, right = first tooth at end
-        const align = joinery.align || 'left';
-        // For right alignment, we start at index 1 instead of 0
-        const startIndex = align === 'right' ? 1 : 0;
+        ctx.save();
+        // 1) Erase the original straight edge along its whole length so the
+        //    notch mouths are not crossed by a leftover line.
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = strokeWidth * 2.2;
+        ctx.strokeStyle = '#000';
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
 
-        const dovetailTaper = Math.min(depth * 0.2, toothWidth * 0.2);
-        const taper = isDovetail ? dovetailTaper : 0;
-
-        for (let i = startIndex; i < count; i += 2) {
-            const start = i * toothWidth;
-            const end = start + toothWidth;
-
-            const sx = p1.x + ux * start;
-            const sy = p1.y + uy * start;
-            const ex = p1.x + ux * end;
-            const ey = p1.y + uy * end;
-            const ox = nx * depth * direction;
-            const oy = ny * depth * direction;
-
-            ctx.save();
-            ctx.lineWidth = 1 / frame.viewport.zoom;
-            ctx.strokeStyle = strokeColor;
-            ctx.fillStyle = fillColor;
-            ctx.beginPath();
-            if (isDovetail) {
-                // Trapezoid with tapered sides
-                const topStartX = sx + ox - ux * taper;
-                const topStartY = sy + oy - uy * taper;
-                const topEndX = ex + ox + ux * taper;
-                const topEndY = ey + oy + uy * taper;
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(ex, ey);
-                ctx.lineTo(topEndX, topEndY);
-                ctx.lineTo(topStartX, topStartY);
-            } else {
-                // Rectangle (finger joint)
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(ex, ey);
-                ctx.lineTo(ex + ox, ey + oy);
-                ctx.lineTo(sx + ox, sy + oy);
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-        }
+        // 2) Redraw the edge as the jointed outline in the shape's stroke.
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.lineWidth = strokeWidth;
+        ctx.lineJoin = 'miter';
+        ctx.strokeStyle = '#000000';
+        ctx.beginPath();
+        outline.forEach((pt, i) => {
+            if (i === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+        });
+        ctx.stroke();
+        ctx.restore();
 
         // Render and store interactive handles
-        this.renderJoineryHandles(frame, edge, joinery, p1, p2, ux, uy, nx, ny, depth, direction, length, toothWidth, startIndex, count);
+        this.renderJoineryHandles(frame, edge, joinery, p1, p2, ux, uy, nx, ny, depth, direction, length, toothWidth, startIndex, plan.count);
+    }
+
+    /**
+     * Build the toothed edge outline as world-space points: an open polyline
+     * from one corner to the other, on the boundary along tabs and cut inward
+     * along notches (trapezoidal for a dovetail). Pure — testable without a
+     * canvas.
+     *
+     * @param {Object} p
+     * @param {{x:number,y:number}} p.p1  Edge start (already rotated).
+     * @param {number} p.ux  @param {number} p.uy  Unit vector along the edge.
+     * @param {number} p.nx  @param {number} p.ny  Outward unit normal.
+     * @param {ReturnType<import('../../../models/joinery.js').jointRenderPlan>} p.plan
+     * @returns {Array<{x:number,y:number}>}
+     */
+    buildToothOutline({ p1, ux, uy, nx, ny, plan }) {
+        const { depth, toothWidth, taper, count, startIndex, tooth } = plan;
+        const inX = -nx;   // inward (into the panel) unit vector
+        const inY = -ny;
+        const length = toothWidth * count;
+
+        // Point at distance `t` along the edge, offset `off` inward.
+        const P = (t, off) => ({
+            x: p1.x + ux * t + inX * off,
+            y: p1.y + uy * t + inY * off
+        });
+        // Notches are the removed teeth: same alternating parity as before.
+        const isNotch = (i) => i >= startIndex && ((i - startIndex) % 2 === 0);
+        const flare = tooth === 'trapezoid' ? taper : 0;
+
+        const pts = [P(0, 0)];   // tie into the starting corner at edge level
+        for (let i = 0; i < count; i++) {
+            const t0 = i * toothWidth;
+            const t1 = t0 + toothWidth;
+            if (isNotch(i)) {
+                // Cut inward; a dovetail flares wider at the base (socket grip).
+                pts.push(P(t0, 0));
+                pts.push(P(Math.max(0, t0 - flare), depth));
+                pts.push(P(Math.min(length, t1 + flare), depth));
+                pts.push(P(t1, 0));
+            } else {
+                // Tab: material stays on the boundary.
+                pts.push(P(t0, 0));
+                pts.push(P(t1, 0));
+            }
+        }
+        pts.push(P(length, 0));  // tie into the ending corner at edge level
+        return pts;
     }
 
     /**
