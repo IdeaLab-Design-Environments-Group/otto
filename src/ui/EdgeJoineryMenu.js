@@ -3,16 +3,7 @@
  * Shows joint type options and parameters for the selected edge.
  */
 import { FocusTrap } from './a11y/FocusTrap.js';
-
-const JOINT_TYPES = [
-    { id: 'finger_joint', label: 'Finger Joint' },
-    { id: 'dovetail', label: 'Dovetail Joint' }
-];
-
-const ALIGN_OPTIONS = [
-    { id: 'left', label: 'Left' },
-    { id: 'right', label: 'Right' }
-];
+import { JOINT_TYPES, ALIGN_OPTIONS, normalizeJoineryType } from '../models/joinery.js';
 
 const DEFAULT_THICKNESS_MM = 3;
 const DEFAULT_FINGER_COUNT = 6;
@@ -70,6 +61,10 @@ export class EdgeJoineryMenu {
         this.submenuTitle = document.createElement('div');
         this.submenuTitle.className = 'edge-joinery-menu__title';
         this.submenu.appendChild(this.submenuTitle);
+
+        this.submenuDesc = document.createElement('p');
+        this.submenuDesc.className = 'edge-joinery-menu__desc';
+        this.submenu.appendChild(this.submenuDesc);
 
         const thicknessGroup = document.createElement('div');
         thicknessGroup.className = 'edge-joinery-menu__field';
@@ -184,15 +179,7 @@ export class EdgeJoineryMenu {
         const joinery = shapeStore?.getEdgeJoinery?.(edge) || null;
 
         if (joinery?.type) {
-            const type = String(joinery.type).toLowerCase();
-            const mappedType = (
-                type === 'finger_male' ||
-                type === 'male' ||
-                type === 'finger_joint'
-            ) ? 'finger_joint'
-                : (type === 'dovetail' || type === 'dovetail_male' || type === 'dovetail_female')
-                    ? 'dovetail'
-                    : null;
+            const mappedType = normalizeJoineryType(joinery.type);
             if (mappedType) {
                 this.setActiveType(mappedType, true);
                 if (typeof joinery.thicknessMm === 'number') {
@@ -259,8 +246,9 @@ export class EdgeJoineryMenu {
             button.classList.toggle('is-active', id === type);
         });
         if (type && openSubmenu) {
-            const typeLabel = JOINT_TYPES.find((item) => item.id === type)?.label || 'Joint';
-            this.submenuTitle.textContent = typeLabel;
+            const joint = JOINT_TYPES.find((item) => item.id === type);
+            this.submenuTitle.textContent = joint?.label || 'Joint';
+            if (this.submenuDesc) this.submenuDesc.textContent = joint?.desc || '';
             this.openSubmenu();
             setTimeout(() => {
                 this.thicknessInput.focus();
@@ -342,3 +330,4 @@ export class EdgeJoineryMenu {
 }
 
 export { JOINT_TYPES, ALIGN_OPTIONS };
+

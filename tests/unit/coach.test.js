@@ -7,7 +7,15 @@ import { ShapeRegistry } from '../../src/models/shapes/ShapeRegistry.js';
 import { Parameter } from '../../src/models/Parameter.js';
 import { ParameterBinding, ExpressionBinding } from '../../src/models/Binding.js';
 import { buildSceneSummary, sceneSummaryToText } from '../../src/review/SceneSummary.js';
-import { parseFindings, SEVERITIES } from '../../src/review/FabricationCoach.js';
+import { parseFindings, mergeFindings, SEVERITIES } from '../../src/review/FabricationCoach.js';
+import { runFabricationRules, DEFAULT_LASER } from '../../src/review/FabricationRules.js';
+
+/** Minimal summary builder for precise rule-threshold tests. */
+function summaryOf(shapes, extent = null) {
+    return { unit: 'mm', parameters: [], shapes, extent, code: null,
+        counts: { shapes: shapes.length, parameters: 0 } };
+}
+const titles = (list) => list.map(f => f.title);
 
 // ---- buildSceneSummary ----------------------------------------------------
 
@@ -34,6 +42,16 @@ test('shape properties are listed with rounded values', () => {
     // depth is a common bindable property defaulting to 3mm.
     assertEqual(s.props.depth.value, 3);
     assert(!('boundTo' in s.props.radius), 'unbound property has no boundTo');
+});
+
+test('summary captures per-shape bounds, depth, and overall extent', () => {
+    const circle = ShapeRegistry.create('circle', { x: 0, y: 0 }, { radius: 20 });
+    const summary = buildSceneSummary({ shapes: [circle], parameters: [] });
+    assertEqual(summary.shapes[0].bounds.w, 40); // radius 20 -> 40mm across
+    assertEqual(summary.shapes[0].bounds.h, 40);
+    assertEqual(summary.shapes[0].depth, 3);
+    assertEqual(summary.extent.w, 40);
+    assertEqual(summary.extent.h, 40);
 });
 
 test('a parameter binding is annotated by the parameter name', () => {
@@ -109,4 +127,99 @@ test('parseFindings returns [] for junk input', () => {
     assertDeepEqual(parseFindings(null), []);
     assertDeepEqual(parseFindings('nope'), []);
     assertDeepEqual(parseFindings({}), []);
+});
+
+// ---- runFabricationRules (laser-cutting linter) ---------------------------
+
+test('no shapes yields no fabrication findings', () => {
+    assertDeepEqual(runFabricationRules(summaryOf([])), []);
+});
+
+test('a normal small part gets only the standing kerf reminder', () => {
+    const s = summaryOf(
+        [{ id: 'r1', type: 'rectangle', props: {}, bounds: { w: 80, h: 40 }, depth: 3 }],
+        { w: 80, h: 40 }
+    );
+    const out = runFabricationRules(s);
+    assertDeepEqual(titles(out), ['Remember kerf compensation']);
+});
+
+test('a layout larger than the bed warns; far larger errors', () => {
+    const over = runFabricationRules(summaryOf(
+        [{ id: 'p', type: 'rectangle', props: {}, bounds: { w: 700, h: 500 }, depth: 3 }],
+        { w: 700, h: 500 }
+    ));
+    const bedFit = over.find(f => f.title === 'Design may not fit the laser bed');
+    assert(bedFit && bedFit.severity === 'warning', 'over-bed -> warning');
+
+    const wayOver = runFabricationRules(summaryOf(
+        [{ id: 'p', type: 'rectangle', props: {}, bounds: { w: 1300, h: 900 }, depth: 3 }],
+        { w: 1300, h: 900 }
+    ));
+    const bedFit2 = wayOver.find(f => f.title === 'Design may not fit the laser bed');
+    assertEqual(bedFit2.severity, 'error');
+});
+
+test('a design that fits when rotated onto the bed is not flagged', () => {
+    // 380 x 590: too tall upright (590 > 400) but fits rotated (590 <= 600).
+    const out = runFabricationRules(summaryOf(
+        [{ id: 'p', type: 'rectangle', props: {}, bounds: { w: 380, h: 590 }, depth: 3 }],
+        { w: 380, h: 590 }
+    ));
+    assert(!titles(out).includes('Design may not fit the laser bed'), 'rotated fit ok');
+});
+
+test('parts smaller than the minimum feature size are flagged', () => {
+    const out = runFabricationRules(summaryOf(
+        [{ id: 'tiny', type: 'circle', props: {}, bounds: { w: 2, h: 2 }, depth: 3 }],
+        { w: 2, h: 2 }
+    ));
+    assert(out.some(f => f.title.includes('very small')), 'tiny part warned');
+});
+
+test('too-thin and too-thick material are both reported', () => {
+    const thin = runFabricationRules(summaryOf(
+        [{ id: 'a', type: 'rectangle', props: {}, bounds: { w: 50, h: 50 }, depth: 0.5 }],
+        { w: 50, h: 50 }
+    ));
+    assert(thin.some(f => f.title === 'Material looks too thin'), 'thin flagged');
+
+    const thick = runFabricationRules(summaryOf(
+        [{ id: 'b', type: 'rectangle', props: {}, bounds: { w: 50, h: 50 }, depth: 12 }],
+        { w: 50, h: 50 }
+    ));
+    assert(thick.some(f => f.title === 'Thick material for a laser'), 'thick flagged');
+});
+
+test('mixed material thicknesses produce a joint-consistency note', () => {
+    const out = runFabricationRules(summaryOf([
+        { id: 'a', type: 'rectangle', props: {}, bounds: { w: 50, h: 50 }, depth: 3 },
+        { id: 'b', type: 'rectangle', props: {}, bounds: { w: 50, h: 50 }, depth: 6 }
+    ], { w: 110, h: 50 }));
+    assert(out.some(f => f.title === 'Pieces use different material thicknesses'), 'mixed depth noted');
+});
+
+test('rule thresholds are overridable (custom bed size)', () => {
+    const shapes = [{ id: 'p', type: 'rectangle', props: {}, bounds: { w: 500, h: 350 }, depth: 3 }];
+    const ext = { w: 500, h: 350 };
+    // Fits the default 600x400 bed...
+    assert(!titles(runFabricationRules(summaryOf(shapes, ext)))
+        .includes('Design may not fit the laser bed'), 'fits default bed');
+    // ...but not a small 300x200 bed.
+    assert(titles(runFabricationRules(summaryOf(shapes, ext), { bedWidth: 300, bedHeight: 200 }))
+        .includes('Design may not fit the laser bed'), 'over small bed');
+    assertEqual(DEFAULT_LASER.bedWidth, 600);
+});
+
+test('mergeFindings keeps rules ahead of AI within a severity, sorted by severity', () => {
+    const rules = [
+        { severity: 'warning', title: 'rule-warn', detail: '', suggestion: '' },
+        { severity: 'info', title: 'rule-info', detail: '', suggestion: '' }
+    ];
+    const llm = [
+        { severity: 'error', title: 'ai-error', detail: '', suggestion: '' },
+        { severity: 'info', title: 'ai-info', detail: '', suggestion: '' }
+    ];
+    const merged = mergeFindings(rules, llm);
+    assertDeepEqual(titles(merged), ['ai-error', 'rule-warn', 'rule-info', 'ai-info']);
 });
