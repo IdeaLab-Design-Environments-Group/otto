@@ -95,8 +95,7 @@ export class Circle extends Shape {
 
     /**
      * Build the geometry-library Path for this circle — the single source of
-     * truth for its geometry, shared by getBounds/containsPoint/render and
-     * the 3D mesh builder.
+     * truth for its geometry, shared by getBounds/containsPoint/render.
      *
      * @returns {import('../../geometry/Path.js').Path}
      */

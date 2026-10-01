@@ -7,7 +7,7 @@ edge joinery, or generate the same scene from AQUI code or Blockly blocks.
 
 This document describes the system **after** the MVC / schema / command-system
 refactor. If you are looking for the old `CanvasRenderer`, the memento undo
-system, or the retired 3D assembly view — they are gone. See
+system, the retired 3D assembly view, or STL import — they are gone. See
 the individual sections for what replaced them.
 
 ## Table of contents
@@ -48,7 +48,6 @@ flowchart TD
     subgraph Views
         CV[CanvasView<br/>owns canvas, DPR, rAF]
         PASSES[Render passes<br/>Grid/Shapes/Joinery/Selection/…]
-        V3D[Viewport3D<br/>embedded live 3D]
         PANELS[Panels<br/>Properties / Parameters / ShapeLibrary / Tabs]
     end
 
@@ -77,7 +76,6 @@ flowchart TD
     CV --> PASSES
     CV --> SCTX & IS & VPC
     PASSES -. read only .-> IS
-    V3D --> SCTX
     PANELS --> SCTX
     SCTX --> SS & PS & BR & SM & HM
     HM --> CMDS
@@ -92,7 +90,7 @@ flowchart TD
     SS -. emits .-> EB
     HM -. emits .-> EB
     VPC -. emits .-> EB
-    EB -. notifies .-> CV & V3D & PANELS
+    EB -. notifies .-> CV & PANELS
 ```
 
 Everything is wired together in `core/Application.js#init()`.
@@ -155,7 +153,6 @@ older panels) keep working. New code reaches the model via `SceneContext`.
   `interaction.joineryHandles` (a hit-test cache) as it draws — that cache is
   derived render output, not model state.
 
-- **`Viewport3D`** — embedded live 3D (section 5).
 - **Panel components** — `PropertiesPanel`, `ParametersMenu`, `ShapeLibrary`,
   `TabBar`, `ZoomControls`, `CodeEditor`, `BlocksEditor`, etc.
 
@@ -370,34 +367,6 @@ except the `version` field** — and the 1.0.0 → 2.0.0 migration is a pure ver
 stamp (the schema supplies the defaults on load; pre-2.0.0 per-shape
 `thickness` fields are geometry, e.g. a Cross arm width, and are left
 untouched). This byte-stability is guarded by fixtures (section 10).
-
-**STL import (2.5D bridge):** `persistence/StlImporter.js` parses ASCII **and**
-binary STL (binary detected by the exact-size rule, not the leading `solid`
-text), then flattens the mesh to a **silhouette outline** on a viewing plane
-(`xy` top / `xz` front / `yz` side — front/side flip Z so peaks point up), with
-the extent along the perpendicular axis carried in as the piece's `depth`.
-
-Two outline methods: `footprint()` = the fast **convex hull** (used for view
-selection + as a fallback), and `silhouette()` = the **true, concave-aware
-outline** used for the actual import. The silhouette is dependency-free and
-robust for any triangle soup (concave parts, separate islands, overlapping
-triangles): project → rasterize triangles into a boolean grid → trace the
-filled/empty boundary into closed loops → map back to mm → Douglas–Peucker
-simplify (so slanted edges are lines, not staircases). The largest loop is the
-outline; interior loops are reported as holes (a PathShape is a single contour,
-so holes are noted, not represented). `bestPlane()` auto-picks the most
-distinctive view (a house imports as its gabled front, not a square); the
-import prompt lets the user override the view and set the (unit-less) scale.
-`Application.importSTL()` adds that as a closed `PathShape` via
-`AddShapeCommand` (undoable), bounding-box-centred on the viewport and then
-framed with a fit-to-view — so a 3D model becomes a normal parametric Otto
-piece that extrudes back to roughly its original bounding block. Because STL is
-**unit-less** (mm, cm, inch, and m files can produce identical numbers, so no
-magnitude heuristic can tell them apart), import always confirms a **scale
-factor** (`footprint(parsed, scale)` multiplies points + depth uniformly),
-pre-filled with `1` for a sane size or a fit-to-work-area suggestion for an
-extreme one. The parser, hull, footprint scaling, and scale suggestion are
-pure/DOM-free and unit-tested.
 
 ---
 

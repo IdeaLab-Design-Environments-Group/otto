@@ -56,19 +56,6 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 - [ ] Ctrl/Cmd+S saves; reload restores everything (shapes, bindings, joinery, viewport, tabs)
 - [ ] Export `.pds`, clear, re-import — scene identical
 - [ ] Autosave restores after a hard reload without manual save
-- [ ] **STL** button → pick an ASCII or binary `.stl` → a prompt shows the
-      auto-picked view + size and accepts `<scale> [view]` (Enter accepts;
-      `10 top`, `1 side`, etc.). The outline appears centered + framed;
-      `depth` = the extent along the view's perpendicular axis; the toast
-      reports the view + mm size. Undo removes it.
-- [ ] Import a *house* STL → it comes in as the gabled **front** silhouette
-      (peak up), not a flat square (the top view). Overriding `... top` gives
-      the square footprint instead.
-- [ ] Import a *concave* part (L-bracket, gear, letter) → the outline follows
-      the real (concave) silhouette, not a convex bounding shape; slanted edges
-      are clean lines, not staircases.
-- [ ] Import a part with a *hole* (washer/frame) → outer outline is correct and
-      the toast notes "N interior hole(s) not represented".
 
 ## Code & blocks editors
 - [ ] Run an AQUI script (params + shapes + transform + boolean op + for-loop + draw/turtle)
