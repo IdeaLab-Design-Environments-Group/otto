@@ -63,13 +63,7 @@ export class Interpreter {
   }
 
   evaluateNode(node) {
-    if (node.type === 'shape' && this.currentLoopCounter !== undefined) {
-      node = {
-        ...node,
-        name: `${node.name}_${this.currentLoopCounter}`
-      };
-    }
-
+    // Loop/function shape-name suffixes are applied once, in ShapeVisitor.
     // Dispatch to appropriate visitor
     switch (node.type) {
       case 'param':
@@ -103,6 +97,10 @@ export class Interpreter {
         return this.evaluateStyleBlock(node);
       case 'constraints_block':
         return this.visitors.constraints.visit(node);
+      case 'add':
+        throw new Error(`'add ${node.shape}' is only valid inside a layer or boolean block`);
+      case 'rotate':
+        throw new Error(`'rotate:' is only valid inside a layer or transform block`);
       default:
         throw new Error(`Unknown node type: ${node.type}`);
     }

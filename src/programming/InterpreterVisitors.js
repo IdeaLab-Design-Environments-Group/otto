@@ -49,7 +49,7 @@ export class ExpressionVisitor extends BaseVisitor {
       case 'array':
         return node.elements.map(e => this.interpreter.evaluateExpression(e));
       case 'function_call':
-        return this.interpreter.visitors.functionCall.visit(node);
+        return this.interpreter.visitors.functionCall.visitFunctionCall(node);
       case 'param_ref':
         const param = this.interpreter.env.getParameter(node.name);
         return param && typeof param === 'object' ? param[node.property] : undefined;
@@ -336,21 +336,28 @@ export class ControlFlowVisitor extends BaseVisitor {
     const step = this.interpreter.evaluateExpression(node.step);
     
     const outerLoopCounter = this.interpreter.currentLoopCounter;
-    
-    for (let i = start; i <= end; i += step) {
-      this.interpreter.env.setParameter(node.iterator, i);
-      this.interpreter.currentLoopCounter = i;
-      
-      for (const statement of node.body) {
-        this.interpreter.evaluateNode(statement);
+
+    // The iterator lives in its own scope so it never leaks out as a
+    // global parameter. Nested loops chain their counters (c_0_1) so shape
+    // names stay unique across outer iterations.
+    this.interpreter.env.pushScope();
+    try {
+      for (let i = start; i <= end; i += step) {
+        this.interpreter.env.setParameter(node.iterator, i);
+        this.interpreter.currentLoopCounter =
+          outerLoopCounter !== undefined ? `${outerLoopCounter}_${i}` : i;
+
+        for (const statement of node.body) {
+          this.interpreter.evaluateNode(statement);
+          if (this.interpreter.currentReturn !== null) break;
+        }
+
         if (this.interpreter.currentReturn !== null) break;
       }
-      
-      if (this.interpreter.currentReturn !== null) break;
+    } finally {
+      this.interpreter.env.popScope();
+      this.interpreter.currentLoopCounter = outerLoopCounter;
     }
-    
-    this.interpreter.currentLoopCounter = outerLoopCounter;
-    // Note: parameter cleanup handled by scope in enhanced environment
     return this.interpreter.currentReturn;
   }
 }
