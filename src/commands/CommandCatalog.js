@@ -16,6 +16,8 @@ export class CommandCatalog {
     constructor() {
         /** @type {Map<string, Function>} name → factory(...args) => Command */
         this.factories = new Map();
+        /** @type {Map<string, CommandMeta>} name → optional metadata */
+        this.meta = new Map();
 
         // Built-ins
         this.register('shape.add', (...args) => new AddShapeCommand(...args));
@@ -33,21 +35,54 @@ export class CommandCatalog {
     }
 
     /**
+     * @typedef {Object} CommandMeta
+     * @property {string} [summary] - One-line description (tooling / agent tools).
+     * @property {Object} [schema] - JSON schema of the single structured
+     *   argument object (see core/jsonSchemaLite).
+     * @property {'read'|'low'|'structural'|'destructive'} [risk]
+     */
+
+    /**
      * Register a command factory under a name. Plugins use this via
      * PluginAPI.registerCommand.
      *
      * @param {string} name
      * @param {Function} factory - (...args) => Command
+     * @param {CommandMeta} [meta] - Optional description of the command.
      */
-    register(name, factory) {
+    register(name, factory, meta = null) {
         if (!name || typeof factory !== 'function') {
             throw new Error('CommandCatalog.register requires a name and a factory function');
         }
         this.factories.set(name, factory);
+        if (meta) {
+            this.meta.set(name, { ...meta });
+        } else {
+            this.meta.delete(name);
+        }
     }
 
     unregister(name) {
         this.factories.delete(name);
+        this.meta.delete(name);
+    }
+
+    /**
+     * @param {string} name
+     * @returns {?CommandMeta} The command's metadata, or null if none.
+     */
+    getMeta(name) {
+        return this.meta.get(name) || null;
+    }
+
+    /**
+     * Every command that has metadata, sorted by name.
+     * @returns {Array<{name: string} & CommandMeta>}
+     */
+    describe() {
+        return Array.from(this.meta.entries())
+            .map(([name, meta]) => ({ name, ...meta }))
+            .sort((a, b) => a.name.localeCompare(b.name));
     }
 
     has(name) {
