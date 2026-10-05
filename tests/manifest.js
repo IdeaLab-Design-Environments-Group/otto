@@ -15,5 +15,6 @@ export const TEST_MODULES = [
     './unit/aqui-bugs.test.js',
     './unit/expression-strict.test.js',
     './unit/command-meta.test.js',
-    './unit/edges.test.js'
+    './unit/edges.test.js',
+    './unit/edge-hit-rotation.test.js'
 ];

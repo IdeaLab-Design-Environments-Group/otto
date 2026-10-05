@@ -183,23 +183,35 @@ export class SelectionPass {
         // Only render edge highlights in edge selection mode
         if (selectionMode !== 'edge') return;
 
+        // Edges are in their shape's unrotated geometry: draw them inside the
+        // shape's rotation, exactly like ShapesPass draws the shape.
+        const inShapeFrame = (edge, draw) => {
+            const stored = edge.shapeId != null ? frame.scene.shapeStore.get(edge.shapeId) : null;
+            const shape = stored ? frame.bindingResolver.resolveShape(stored) : null;
+            if (!shape) {
+                draw();
+                return;
+            }
+            withShapeRotation(ctx, shape.getBounds(), shape.rotation, draw);
+        };
+
         // Render selected edges
         const selectedEdges = frame.selection.getSelectedEdges();
         selectedEdges.forEach(edge => {
-            renderEdgeSelected(ctx, edge, {
+            inShapeFrame(edge, () => renderEdgeSelected(ctx, edge, {
                 selectColor: '#ff6600',
                 selectWidth: 3 / frame.viewport.zoom
-            });
+            }));
         });
 
-        // Render hovered edge
+        // Render hovered edge (its hover point is already in world coordinates)
         const hoveredEdge = frame.selection.hoveredEdge?.edge ?? null;
         const hoveredEdgePosition = frame.selection.hoveredEdge?.position ?? null;
         if (hoveredEdge) {
-            renderEdgeHover(ctx, hoveredEdge, {
+            inShapeFrame(hoveredEdge, () => renderEdgeHover(ctx, hoveredEdge, {
                 hoverColor: '#0099ff',
                 hoverWidth: 4 / frame.viewport.zoom
-            });
+            }));
 
             // Render the hover point
             if (hoveredEdgePosition) {

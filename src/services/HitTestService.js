@@ -10,6 +10,7 @@
  * @module services/HitTestService
  */
 import { PathShape } from '../models/shapes/PathShape.js';
+import { toLocal, toWorld } from '../joints/edges.js';
 import { getResizeStrategy } from '../ui/ShapeResizeStrategies.js';
 import {
     EdgeHitTester,
@@ -100,10 +101,29 @@ export class HitTestService {
 
         // Adjust tolerance based on zoom
         const tolerance = DEFAULT_HIT_DISTANCE / this.vc.viewport.zoom;
-        this.edgeHitTester.setEdges(edges);
         this.edgeHitTester.tolerance = tolerance;
 
-        return this.edgeHitTester.test(worldPos);
+        // Edges are in each shape's unrotated geometry; the canvas draws them
+        // rotated about the bounds centre. Test every shape's edges in its own
+        // frame and report the closest hit, with its point mapped back to world.
+        const byShape = new Map();
+        for (const edge of edges) {
+            const key = edge.shapeId ?? null;
+            if (!byShape.has(key)) byShape.set(key, []);
+            byShape.get(key).push(edge);
+        }
+        let best = null;
+        for (const [shapeId, group] of byShape) {
+            const stored = shapeId !== null ? shapeStore.get(shapeId) : null;
+            const shape = stored ? this.context.bindingResolver.resolveShape(stored) : null;
+            const local = shape ? toLocal(shape, worldPos) : worldPos;
+            this.edgeHitTester.setEdges(group);
+            const hit = this.edgeHitTester.test(local);
+            if (hit && (!best || hit.distance < best.distance)) {
+                best = shape ? { ...hit, position: toWorld(shape, hit.position) } : hit;
+            }
+        }
+        return best;
     }
 
     hitTestRotationHandle(worldX, worldY) {
