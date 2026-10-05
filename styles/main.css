@@ -2160,3 +2160,24 @@ body.dark-theme .canvas-container {
 .joint-popover__option:focus-visible { background: var(--sidebar-yellow-hover); }
 .joint-popover__error { padding: 0 6px; font-size: 12px; color: rgb(153, 27, 27); }
 .joint-popover__error:empty { display: none; }
+
+.joint-inspector { padding: 6px 10px 12px; font-size: 12px; color: var(--text-dark); }
+.joint-inspector__title { margin: 6px 0; font-size: 12px; font-weight: 600; }
+.joint-inspector__joint { margin-bottom: 8px; padding: 6px; border: 1px solid var(--border-light); border-radius: 6px; }
+.joint-inspector__head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.joint-inspector__name { flex: 1; font-weight: 600; }
+.joint-inspector__grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: center; }
+.joint-inspector__input { width: 100%; box-sizing: border-box; padding: 2px 4px; font-size: 12px; border: 1px solid var(--border-medium); border-radius: 4px; }
+.joint-inspector__btn {
+    margin: 0;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 4px;
+}
+.joint-inspector__btn:hover,
+.joint-inspector__btn:focus-visible { background: var(--sidebar-yellow-hover); }
+.joint-inspector__issue { margin: 3px 0 0; padding: 3px 6px; border-radius: 4px; background: var(--sidebar-yellow); }
+.joint-inspector__issue.is-error { background: rgb(254, 226, 226); color: rgb(153, 27, 27); }

@@ -6,6 +6,7 @@ import { Component } from './Component.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { LiteralBinding, ParameterBinding, ExpressionBinding } from '../models/Binding.js';
 import { SetBindingCommand, SetShapePropertyCommand } from '../commands/shapeCommands.js';
+import { JointInspector } from './JointInspector.js';
 
 export class PropertiesPanel extends Component {
     /**
@@ -28,6 +29,8 @@ export class PropertiesPanel extends Component {
         // Tracks which "shapeId:property" cells have their parameter/formula
         // binding controls revealed (literal fields stay compact by default).
         this.expandedBindings = new Set();
+        this.jointInspector = context ? new JointInspector(context) : null;
+        this.subscribe(EVENTS.JOINTS_CHANGED, () => this.render());
 
         // Subscribe to shape selection events (only once in constructor)
         this.subscribe(EVENTS.SHAPE_SELECTED, (payload) => {
@@ -140,6 +143,7 @@ export class PropertiesPanel extends Component {
                 const divider = this.createElement('div', { class: 'properties-separator' });
                 this.container.appendChild(divider);
                 this.renderProperties(this.shapeStore.get(shape.id));
+                this.jointInspector?.render(this.container, shape.id);
             }
         }
     }
