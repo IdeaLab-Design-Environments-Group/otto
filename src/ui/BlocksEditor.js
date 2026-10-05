@@ -130,6 +130,8 @@ export class BlocksEditor extends Component {
         this._blocksDefined = false;
         this._resizeHandler = null;
         this._resizeObserver = null;
+        /** Code to turn into blocks once the (hidden) Blocks tab is shown. */
+        this._pendingCode = null;
         this._syncEnabled = true; // Enable canvas → blocks sync
         this._suppressShapeEvents = false;
         this._blockSeed = 0;
@@ -423,6 +425,12 @@ export class BlocksEditor extends Component {
             this._resizeObserver = new ResizeObserver(() => {
                 if (this.workspace) {
                     window.Blockly.svgResize(this.workspace);
+                }
+                // A sync that arrived while the tab was hidden runs once it shows.
+                if (this._pendingCode !== null && this.isWorkspaceVisible()) {
+                    const code = this._pendingCode;
+                    this._pendingCode = null;
+                    this.syncFromCode(code);
                 }
             });
             this._resizeObserver.observe(this.container);
@@ -743,8 +751,21 @@ export class BlocksEditor extends Component {
         }
     }
 
+    /** True when the Blockly container is laid out (its tab is showing). */
+    isWorkspaceVisible() {
+        return Boolean(this.container && this.container.offsetWidth > 0 && this.container.offsetHeight > 0);
+    }
+
     syncFromCode(code) {
         if (!this.workspace || !window.Blockly) return false;
+        // Rendering blocks into a hidden (zero-size) workspace sends Blockly's
+        // block-bumping layout into an endless loop that freezes the page, so
+        // defer until the Blocks tab is shown (see the ResizeObserver).
+        if (!this.isWorkspaceVisible()) {
+            this._pendingCode = String(code ?? '');
+            return true;
+        }
+        this._pendingCode = null;
         const text = String(code ?? '').trim();
         if (!text) {
             this._suppressWorkspaceEvents = true;
