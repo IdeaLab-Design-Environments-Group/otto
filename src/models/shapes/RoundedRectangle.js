@@ -16,6 +16,7 @@
  * @module models/shapes/RoundedRectangle
  */
 
+import { axisSideNames } from '../../joints/edges.js';
 import { Shape } from './Shape.js';
 import {
     Color as GeoColor,
@@ -92,6 +93,11 @@ export class RoundedRectangle extends Shape {
         ctx.beginPath();
         path.toCanvasPath(ctx);
         ctx.stroke();
+    }
+
+    /** Named joint edges: top / right / bottom / left (see joints/edges). */
+    static edgeNames(shape, edges) {
+        return axisSideNames(edges);
     }
 
     /**

@@ -14,5 +14,6 @@ export const TEST_MODULES = [
     './unit/joinery.test.js',
     './unit/aqui-bugs.test.js',
     './unit/expression-strict.test.js',
-    './unit/command-meta.test.js'
+    './unit/command-meta.test.js',
+    './unit/edges.test.js'
 ];

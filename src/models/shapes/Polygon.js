@@ -91,6 +91,22 @@ export class Polygon extends Shape {
     }
 
     /**
+     * Named joint edges: `side0..sideN-1` in outline order, plus `bottom`
+     * for the lowest side (largest y on screen) — see joints/edges.
+     */
+    static edgeNames(shape, edges) {
+        const names = {};
+        let bottom = null;
+        for (const e of edges) {
+            names[`side${e.index}`] = e.index;
+            const mid = (e.a.y + e.b.y) / 2;
+            if (!bottom || mid > bottom.mid + 1e-9) bottom = { index: e.index, mid };
+        }
+        if (bottom) names.bottom = bottom.index;
+        return names;
+    }
+
+    /**
      * Build the geometry-library Path by computing N evenly-spaced vertices around
      * the circumscribed circle and connecting them into a closed polygon.
      *

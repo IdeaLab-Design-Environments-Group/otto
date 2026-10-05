@@ -91,6 +91,11 @@ export class Triangle extends Shape {
         ctx.stroke();
     }
 
+    /** Named joint edges: the flat `base` and the two slanted sides (see joints/edges). */
+    static edgeNames() {
+        return { base: 0, right: 1, left: 2 };
+    }
+
     /**
      * Build the geometry-library Path from three analytically-computed vertices.
      *

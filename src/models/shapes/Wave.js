@@ -16,6 +16,8 @@ const HIT_TEST_STROKE = new GeoStroke(new GeoColor(0, 0, 0, 1), false, 6, 'cente
  */
 export class Wave extends Shape {
     static type = 'wave';
+    /** Its straight segments approximate a curve: no joint edges (joints/edges). */
+    static curvedOutline = true;
 
     static SCHEMA = {
         centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },

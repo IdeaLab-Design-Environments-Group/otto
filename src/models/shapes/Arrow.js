@@ -51,6 +51,11 @@ export class Arrow extends Shape {
         ctx.stroke();
     }
 
+    /** Named joint edges: the flat `tail` end (see joints/edges). */
+    static edgeNames() {
+        return { tail: 6 };
+    }
+
     toGeometryPath() {
         return GeoPath.fromPoints(this.getPoints().map(p => new GeoVec(p.x, p.y)), true);
     }

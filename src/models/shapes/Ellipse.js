@@ -47,6 +47,8 @@ const HIT_TEST_FILL = new GeoFill(new GeoColor(0, 0, 0, 1));
  */
 export class Ellipse extends Shape {
     static type = 'ellipse';
+    /** Its straight segments approximate a curve: no joint edges (joints/edges). */
+    static curvedOutline = true;
 
     static SCHEMA = {
         centerX: { type: 'number', default: (o) => o.position?.x ?? 0, bindable: true, translate: 'x', label: 'Center X' },
