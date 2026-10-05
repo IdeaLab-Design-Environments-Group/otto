@@ -17,6 +17,7 @@ import { LiveRegion } from '../ui/a11y/LiveRegion.js';
 import { CanvasView } from '../views/canvas/CanvasView.js';
 import { Preview3D } from '../views/three/Preview3D.js';
 import { ExamplesPanel } from '../ui/ExamplesPanel.js';
+import { CutFilesPanel } from '../ui/CutFilesPanel.js';
 import { JOINT_EXAMPLES } from '../examples/jointExamples.js';
 import { CanvasInputController } from '../controllers/CanvasInputController.js';
 import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
@@ -194,6 +195,13 @@ export class Application {
                 }
             });
             this.examplesPanel.mount();
+        }
+
+        // Cut files: laser settings, sheets and SVG downloads.
+        const cutButton = document.getElementById('btn-cut-files');
+        if (cutButton) {
+            this.cutFilesPanel = new CutFilesPanel(this.context, { button: cutButton });
+            this.cutFilesPanel.mount();
         }
 
         // Read-only 3D preview of the joined parts (three.js loads on first open).

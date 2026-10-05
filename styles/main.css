@@ -2216,3 +2216,60 @@ body.dark-theme .canvas-container {
 .examples__title { font-weight: 600; font-size: 13px; }
 .examples__description { font-size: 12px; color: var(--text-muted); }
 .examples__tags { font-size: 11px; color: rgb(180, 83, 9); }
+
+/* ===================== Cut files panel ===================== */
+
+.cut-panel {
+    position: fixed;
+    top: 58px;
+    right: 16px;
+    width: min(400px, calc(100vw - 32px));
+    max-height: calc(100vh - 80px);
+    overflow: auto;
+    z-index: 1100;
+    padding: 10px 14px 14px;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.2);
+}
+.cut-panel[hidden] { display: none; }
+.cut-panel__header { display: flex; align-items: center; justify-content: space-between; }
+.cut-panel__title { margin: 0; font-size: 15px; }
+.cut-panel__section { margin: 14px 0 6px; font-size: 13px; }
+.cut-panel__settings { display: grid; grid-template-columns: 1fr 110px; gap: 4px 8px; align-items: center; margin-top: 8px; }
+.cut-panel__label { font-size: 12px; }
+.cut-panel__input { width: 100%; box-sizing: border-box; padding: 3px 6px; font-size: 12px; border: 1px solid var(--border-medium); border-radius: 4px; }
+.cut-panel__check { display: block; margin-top: 6px; font-size: 12px; }
+.cut-panel__btn {
+    margin: 0;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 4px;
+}
+.cut-panel__btn:hover,
+.cut-panel__btn:focus-visible { background: var(--sidebar-yellow-hover); }
+.cut-panel__primary {
+    width: 100%;
+    margin: 0 0 8px;
+    padding: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-light);
+    background: var(--nav-blue);
+    border: 0;
+    border-radius: 6px;
+}
+.cut-panel__problems, .cut-panel__bom { margin: 0; padding-left: 18px; font-size: 12px; }
+.cut-panel__problem { margin: 2px 0; }
+.cut-panel__problem.is-error { color: rgb(153, 27, 27); }
+.cut-panel__problem.is-warning { color: rgb(146, 64, 14); }
+.cut-panel__sheets { display: grid; gap: 10px; }
+.cut-panel__sheet { margin: 0; border: 1px solid var(--border-light); border-radius: 6px; overflow: hidden; }
+.cut-panel__preview { display: block; width: 100%; height: auto; background: #fff; border-bottom: 1px solid var(--border-light); }
+.cut-panel__caption { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px; font-size: 12px; }
+.cut-panel__note { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
