@@ -12,5 +12,6 @@ export const TEST_MODULES = [
     './unit/plugin-lifecycle.test.js',
     './unit/coach.test.js',
     './unit/joinery.test.js',
-    './unit/aqui-bugs.test.js'
+    './unit/aqui-bugs.test.js',
+    './unit/expression-strict.test.js'
 ];

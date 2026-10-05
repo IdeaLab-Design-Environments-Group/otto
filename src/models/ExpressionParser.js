@@ -241,6 +241,18 @@ class FunctionCallNode extends ASTNode {
                 if (argValues.length < 1) throw new Error('max() requires at least 1 argument');
                 return Math.max(...argValues);
 
+            case 'floor':
+                if (argValues.length !== 1) throw new Error('floor() requires 1 argument');
+                return Math.floor(argValues[0]);
+
+            case 'ceil':
+                if (argValues.length !== 1) throw new Error('ceil() requires 1 argument');
+                return Math.ceil(argValues[0]);
+
+            case 'round':
+                if (argValues.length !== 1) throw new Error('round() requires 1 argument');
+                return Math.round(argValues[0]);
+
             default:
                 throw new Error(`Unknown function: ${this.functionName}`);
         }
@@ -272,7 +284,7 @@ export class ExpressionParser {
          * cause a parse-time error.
          * @type {string[]}
          */
-        this.supportedFunctions = ['sin', 'cos', 'sqrt', 'abs', 'min', 'max'];
+        this.supportedFunctions = ['sin', 'cos', 'sqrt', 'abs', 'min', 'max', 'floor', 'ceil', 'round'];
     }
 
     /**
@@ -503,14 +515,49 @@ export class ExpressionParser {
      * @param {Object.<string, number>} [context={}] - Map from parameter names
      *   to their current numeric values.  An empty object is valid when the
      *   expression contains only literal numbers.
+     * @param {{strict?: boolean}} [options] - With {@code strict: true}, a
+     *   referenced name missing from the context throws instead of falling
+     *   back to 0 (used by the block catalog, where a silent 0 would produce
+     *   zero-size parts).
      * @returns {number} The numeric result of the expression.
-     * @throws {Error} If {@link ast} is falsy.
+     * @throws {Error} If {@link ast} is falsy, or in strict mode if a
+     *   referenced name is missing from the context.
      */
-    evaluate(ast, context = {}) {
+    evaluate(ast, context = {}, { strict = false } = {}) {
         if (!ast) {
             throw new Error('AST is required for evaluation');
         }
+        if (strict) {
+            for (const name of this.collectIdentifiers(ast)) {
+                if (context[name] === undefined) {
+                    throw new Error(`Unknown name '${name}' in expression`);
+                }
+            }
+        }
         return ast.evaluate(context);
+    }
+
+    /**
+     * Collect every parameter name referenced by an AST (function names are
+     * not included).
+     *
+     * @param {ASTNode} ast - The root node returned by {@link ExpressionParser#parse}.
+     * @returns {Set<string>} The referenced names.
+     */
+    collectIdentifiers(ast) {
+        const names = new Set();
+        const walk = (node) => {
+            if (node instanceof ParameterRefNode) {
+                names.add(node.name);
+            } else if (node instanceof BinaryOpNode) {
+                walk(node.left);
+                walk(node.right);
+            } else if (node instanceof FunctionCallNode) {
+                node.args.forEach(walk);
+            }
+        };
+        walk(ast);
+        return names;
     }
 
     /**
