@@ -2068,3 +2068,65 @@ body.dark-theme .canvas-container {
     padding: 14px;
     overflow-y: auto;
 }
+
+/* ===================== 3D preview (joined parts) ===================== */
+
+.preview-3d {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    bottom: 72px;      /* keep the canvas zoom controls usable */
+    width: min(55%, 720px);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+    overflow: hidden;
+    z-index: 20;
+}
+.preview-3d.is-hidden { display: none; }
+.preview-3d__bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--sidebar-yellow);
+}
+.preview-3d__title { flex: 1; font-weight: 600; font-size: 13px; color: var(--text-dark); }
+.preview-3d__btn {
+    margin: 0;
+    padding: 2px 10px;
+    min-height: 28px;
+    font-size: 13px;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 4px;
+}
+.preview-3d__btn:hover,
+.preview-3d__btn:focus-visible { background: var(--sidebar-yellow-hover); }
+.preview-3d__viewport { flex: 1; min-height: 0; position: relative; }
+.preview-3d__message {
+    position: absolute;
+    top: 48px;
+    left: 12px;
+    right: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+.preview-3d__message:empty { display: none; }
+.preview-3d__problems {
+    margin: 0;
+    padding: 6px 10px 8px 26px;
+    max-height: 30%;
+    overflow: auto;
+    font-size: 12px;
+    color: rgb(153, 27, 27);
+    background: rgb(254, 242, 242);
+    border-top: 1px solid rgb(254, 202, 202);
+}
+.preview-3d__problems:empty { display: none; }

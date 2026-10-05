@@ -15,6 +15,7 @@ import { PluginManager } from '../plugins/PluginManager.js';
 import { BindingRegistry } from '../models/BindingRegistry.js';
 import { LiveRegion } from '../ui/a11y/LiveRegion.js';
 import { CanvasView } from '../views/canvas/CanvasView.js';
+import { Preview3D } from '../views/three/Preview3D.js';
 import { CanvasInputController } from '../controllers/CanvasInputController.js';
 import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
 import { ParametersMenu } from '../ui/ParametersMenu.js';
@@ -178,6 +179,20 @@ export class Application {
             viewportController: this.viewportController
         });
         this.zoomControls.mount();
+
+        // Read-only 3D preview of the joined parts (three.js loads on first open).
+        const preview3dContainer = document.getElementById('preview-3d');
+        if (preview3dContainer) {
+            const button = document.getElementById('btn-3d');
+            this.preview3d = new Preview3D(preview3dContainer, this.context, {
+                onOpenChange: (open) => {
+                    button?.classList.toggle('active', open);
+                    button?.setAttribute('aria-pressed', String(open));
+                }
+            });
+            this.preview3d.mount();
+            button?.addEventListener('click', () => this.preview3d.toggle());
+        }
 
         this.parametersMenu = new ParametersMenu(
             parametersMenuContainer,
