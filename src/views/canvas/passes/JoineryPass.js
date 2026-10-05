@@ -17,6 +17,7 @@
  * @module views/canvas/passes/JoineryPass
  */
 import { jointRenderPlan } from '../../../models/joinery.js';
+import { toothProfile } from '../../../fabrication/toothProfile.js';
 
 export class JoineryPass {
     /**
@@ -191,38 +192,12 @@ export class JoineryPass {
      * @returns {Array<{x:number,y:number}>}
      */
     buildToothOutline({ p1, ux, uy, nx, ny, plan }) {
-        const { depth, toothWidth, taper, count, startIndex, tooth } = plan;
-        const inX = -nx;   // inward (into the panel) unit vector
-        const inY = -ny;
-        const length = toothWidth * count;
-
-        // Point at distance `t` along the edge, offset `off` inward.
-        const P = (t, off) => ({
-            x: p1.x + ux * t + inX * off,
-            y: p1.y + uy * t + inY * off
-        });
-        // Notches are the removed teeth: same alternating parity as before.
-        const isNotch = (i) => i >= startIndex && ((i - startIndex) % 2 === 0);
-        const flare = tooth === 'trapezoid' ? taper : 0;
-
-        const pts = [P(0, 0)];   // tie into the starting corner at edge level
-        for (let i = 0; i < count; i++) {
-            const t0 = i * toothWidth;
-            const t1 = t0 + toothWidth;
-            if (isNotch(i)) {
-                // Cut inward; a dovetail flares wider at the base (socket grip).
-                pts.push(P(t0, 0));
-                pts.push(P(Math.max(0, t0 - flare), depth));
-                pts.push(P(Math.min(length, t1 + flare), depth));
-                pts.push(P(t1, 0));
-            } else {
-                // Tab: material stays on the boundary.
-                pts.push(P(t0, 0));
-                pts.push(P(t1, 0));
-            }
-        }
-        pts.push(P(length, 0));  // tie into the ending corner at edge level
-        return pts;
+        // Edge-local profile (fabrication/toothProfile) mapped to world:
+        // `s` runs along the edge, `n` goes inward (against the outward normal).
+        return toothProfile(plan).map(({ s, n }) => ({
+            x: p1.x + ux * s - nx * n,
+            y: p1.y + uy * s - ny * n
+        }));
     }
 
     /**

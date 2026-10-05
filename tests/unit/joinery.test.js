@@ -161,3 +161,17 @@ test('a dovetail notch flares wider than its mouth', () => {
     const innerSpan = Math.max(...inner) - Math.min(...inner);
     assert(innerSpan > 20, `dovetail base ${innerSpan} wider than the 20mm mouth`);
 });
+
+// ---- toothProfile (edge-local, shared with the fabrication pipeline) ------
+
+import { toothProfile } from '../../src/fabrication/toothProfile.js';
+
+test('toothProfile spans the edge and cuts notches to the plan depth', () => {
+    const plan = jointRenderPlan({ type: 'finger_joint', thicknessMm: 3, fingerCount: 4 }, 40);
+    const pts = toothProfile(plan);
+    assertApprox(pts[0].s, 0, 1e-9);
+    assertApprox(pts[pts.length - 1].s, 40, 1e-9);
+    const inner = pts.filter(p => p.n > 0);
+    assertEqual(inner.length, 4, 'two notches x two inner corners');
+    for (const p of inner) assertApprox(p.n, 3, 1e-9);
+});
