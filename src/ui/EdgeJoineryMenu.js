@@ -10,8 +10,15 @@ const DEFAULT_FINGER_COUNT = 6;
 const DEFAULT_ALIGN = 'left';
 
 export class EdgeJoineryMenu {
-    constructor({ getShapeStore }) {
+    /**
+     * @param {Object} deps
+     * @param {Function} deps.getShapeStore - Returns the active ShapeStore (read-only use).
+     * @param {Function} deps.onApply - (edge, joinery) => void; performs the
+     *   change, normally through SetEdgeJoineryCommand so it is undoable.
+     */
+    constructor({ getShapeStore, onApply }) {
         this.getShapeStore = getShapeStore;
+        this.onApply = onApply;
         this.edge = null;
         this.activeType = null;
         this.activeAlign = DEFAULT_ALIGN;
@@ -291,15 +298,12 @@ export class EdgeJoineryMenu {
             return;
         }
 
-        const shapeStore = this.getShapeStore?.();
-        if (shapeStore?.setEdgeJoinery) {
-            shapeStore.setEdgeJoinery(this.edge, {
-                type: this.activeType,
-                thicknessMm,
-                fingerCount: Math.floor(fingerCount),
-                align: this.activeAlign
-            });
-        }
+        this.onApply?.(this.edge, {
+            type: this.activeType,
+            thicknessMm,
+            fingerCount: Math.floor(fingerCount),
+            align: this.activeAlign
+        });
 
         this.hide();
     }

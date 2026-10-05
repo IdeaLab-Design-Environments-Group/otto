@@ -49,8 +49,14 @@ export class CanvasInputController {
 
         /** Right-click context menu for assigning joinery to an edge. */
         this.edgeJoineryMenu = new EdgeJoineryMenu({
-            getShapeStore: () => this.context.shapeStore
+            getShapeStore: () => this.context.shapeStore,
+            // Through the command so menu-assigned joinery is undoable.
+            onApply: (edge, joinery) =>
+                this.context.history.execute(new SetEdgeJoineryCommand(edge, joinery))
         });
+
+        /** The Join tool (click two ports to join two shapes). */
+        this.jointTool = new JointToolController({ context, hits: hitTest, vc: viewportController, view: this.view, interaction });
 
         /** Active touch pointers in canvas-relative CSS pixels. */
         this.touchPoints = new Map();
