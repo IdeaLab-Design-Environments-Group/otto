@@ -262,6 +262,27 @@ static `type` + `SCHEMA`; a static block registers the 18 built-ins, and the
 `SHAPE_TYPE_REGISTERED` event is gated so that bulk registration stays quiet
 and only later (plugin) registrations fire it.
 
+**Named edges** (`joints/edges.js`) are the attachment points for joints.
+Every closed shape has generic names `e0..eN-1` for its straight,
+non-zero-length edges. A class can add readable names with
+`static edgeNames(shape, edges)`:
+
+| Shape | Names |
+|---|---|
+| Rectangle, RoundedRectangle, ChamferRectangle, Cross | `top/right/bottom/left` |
+| Slot | `top/bottom` |
+| Triangle | `base/left/right` |
+| Polygon | `side0..`, `bottom` |
+| Arrow | `tail` |
+
+Rectangle-like names are found by direction, not index, so a RoundedRectangle
+keeps them when its radius changes the anchor layout. Shapes whose straight
+segments only approximate a curve (ellipse, arc, donut, gear, spiral, wave)
+declare `static curvedOutline = true` and offer no edges. Edge geometry is in
+the shape's unrotated coordinates. `toWorld` and `toLocal` apply the canvas
+rotation about the bounds centre, and edge hit-testing and edge highlights use
+that same rotation.
+
 ---
 
 ## 3. Command system and undo
@@ -367,6 +388,170 @@ except the `version` field** — and the 1.0.0 → 2.0.0 migration is a pure ver
 stamp (the schema supplies the defaults on load; pre-2.0.0 per-shape
 `thickness` fields are geometry, e.g. a Cross arm width, and are left
 untouched). This byte-stability is guarded by fixtures (section 10).
+
+### Joints (two-sided, between shapes)
+
+Joints connect two shapes at **named edges** and cut **both** panels. They
+live in `SceneState.jointStore` (`core/JointStore.js`):
+
+```
+{id, type, a: {shape, edge}, b: {shape, edge}, params}
+```
+
+Param values are numbers, enum words, or expression strings over scene
+parameters, which stay bound. Every change goes through `joint.add`,
+`joint.remove`, `joint.setParams` or `joint.setGround`
+(`commands/jointCommands.js`). A change that leaves its joint with an error
+(unknown edge, bad parameter) is rejected and rolled back. Deleting a shape
+removes its joints, and undo brings them back.
+
+**Joint types** are strategies in `joints/JointRegistry.js`, one file each in
+`joints/types/`. A type declares its port kinds, a params schema
+(`joints/params.js`), `cut()`, `check()` and `pose()`. Optional hooks:
+`preparePorts`, `extraParts` (loose pieces such as wedges), `bom` (hardware)
+and `merges` (pieces cut as one).
+
+| Type | Ports | What it cuts |
+|---|---|---|
+| `finger` | edge + edge | odd count of interlocking teeth at a 90° corner |
+| `tab_slot` | face line + edge | slots in A, tabs on B. `lock: wedge` gives longer tabs, wedge holes and wedge pieces |
+| `cross_lap` | slot + slot | two slots from opposite edges whose depths add up to the height |
+| `splice` | edge + edge (coplanar) | dovetail or round-knob puzzle teeth |
+| `bolt` | face line + edge | holes in A, T-slots with nut pockets in B (ISO M3–M6 table), bolts and nuts in the BOM |
+| `hinge` | edge + edge | a slitted strip on A as long as the bend; `fabrication/mergePieces.js` joins B to its far side as one piece |
+
+**Ports** (`joints/ports.js`):
+
+| Port | Kind | Meaning |
+|---|---|---|
+| `shape.edge` | `edge` | a named straight edge |
+| `shape.edge.inset(d)` | `line` | a face line d mm inside the edge |
+| `shape.edge.at(d)` | `slot` | a slot start d mm along the edge, running straight in |
+| `shape.line(x0, y0, x1, y1)` | `line` | an explicit face line |
+
+Offsets accept parameter expressions. Either order of ends may be written;
+`resolveParts` orients them to the type's port kinds.
+
+**Pipeline**, pure and cached per scene in `joints/JointService.js`:
+
+```
+resolveParts → cut() features → fabrication/CutGeometry.buildAllCuts
+```
+
+`resolveParts` turns each jointed shape into a part: a flattened outline in
+positive winding, thickness from `depth`, and edge ports. `CutGeometry`
+splices the teeth into the outline and merges notches that meet at a corner.
+`views/canvas/passes/JointsPass.js` draws the cut outline in place of the
+plain one, inside the shape's rotation.
+
+**3D folding** (`joints/JointSolver.js`, `joints/math/Mat4.js`). Joints are
+rigid, so placement is exact. The solver walks a spanning tree of the joint
+graph from the `ground` shape, which sits at the identity pose (z up), and
+composes `T_B · P_B = T_A · P_A · J`:
+- `P` is an edge's port frame: x along the edge, y into the material, z
+  through the thickness.
+- `J = Trans(s, dy, dz) · Rx(φ) · Rz(π)`, with `{s, dy, dz, fold}` from the
+  joint type's `pose()`.
+
+Every joint outside the tree closes a loop and is checked. A residual over
+0.5 mm or 0.5° becomes a `loop_not_closed` warning that says how far off it
+is and in which direction (along the edge, into the panel, or through its
+thickness), e.g. "j6 does not close: off by 3.0 mm …". Separate groups of
+joined parts are laid side by side.
+
+`fabrication/occupancy.js` samples each joint's contact region in 3D. The
+tests require that no point is inside two parts and that no point is inside
+neither. This is the geometric proof that the cut teeth really interlock.
+
+**Canvas, inspector and 3D**
+- **Join tool** (toolbar *Join*, or `J`): click an edge or a face of one
+  shape, then of another.
+  - `joints/jointTool.js` (pure) turns each click into a port: an edge click
+    becomes `{edge, u}`, and a face click becomes the nearest edge plus an
+    inset.
+  - It then lists the joints that fit: edge + edge offers finger, splice,
+    hinge and cross lap at the clicked points; edge + face offers tab and slot
+    or bolt.
+  - `controllers/JointToolController.js` shows the choices and runs
+    `joint.add`. Escape cancels a pick, then leaves the tool. Edge hit-testing
+    takes `{allShapes: true}` here so that a selection does not hide other
+    shapes' edges.
+- `JointsPass` draws each joint as a dashed, labelled link between its ports,
+  plus the tool's picked port (orange) and hovered port (blue).
+- **Inspector:** selecting a jointed shape adds a *Joints* section
+  (`ui/JointInspector.js`). It has inputs generated from each type's params
+  schema, findings, remove, and "stand on the floor".
+- **3D preview** (toolbar *3D*, `views/three/Preview3D.js`):
+  - three.js 0.186.1 comes from the import map and loads on first open, so the
+    2D app never needs it.
+  - `views/three/meshSpecs.js` (pure, tested) extrudes each jointed part's
+    `cuts3d` outline (flat-only features such as a hinge strip are left out)
+    by its thickness, at its solved pose.
+  - Parts in a loop that does not close are red, and the reasons are listed.
+  - Clicking a part selects its shape. Otto's frames are z-up, so the root is
+    turned −90° about x for three.js.
+
+**Fabrication** (toolbar *Cut files*, `ui/CutFilesPanel.js` over
+`fabrication/FabricationPlan.js`, pure and tested):
+- **Parts.** Every closed shape is a part. Jointed shapes use their cut
+  outline, a living-hinge pair becomes one piece (`fabrication/mergePieces.js`),
+  and wedges are extra pieces. Plain shapes keep extra closed paths as holes
+  (a gear's bore). Open lines are listed as not cut.
+- **Kerf.** Outlines grow by kerf/2 and holes shrink by kerf/2
+  (`fabrication/polygon.js`).
+- **Sheets.** Parts are grouped by thickness and shelf-packed onto bed-sized
+  sheets with a 90° rotation where it helps (`fabrication/SheetLayout.js`).
+- **SVG.** One file per sheet in mm, with a red 0.01 mm cut layer and an
+  optional blue label layer (`fabrication/SvgExporter.js`, `data-part`
+  attributes).
+- **Report.** A bill of materials (bolts, nuts, wedges) and problems to fix
+  first: parts larger than the bed, with the usable area and a splice
+  suggestion; joint errors; loops that do not close.
+- **Settings.** Bed, kerf, margin, gap and labels live in
+  `jointStore.fabrication` (saved with the scene) and are changed with the
+  undoable `joint.setFabrication`.
+
+All built-in examples fit the default 600 × 400 bed, and a test enforces it.
+
+**Language and blocks.** AQUI gains two statements:
+
+```
+join finger base.top wall.bottom { count: n * 2 + 1 fit: loose }
+ground base
+```
+
+`join` and `ground` are contextual: they are statements only when a name
+follows, so programs that use them as names keep working. Edge names may be
+lexer keywords (`left`, `right`).
+
+`JoinVisitor` collects joint records:
+- Enum words stay words.
+- At top level, an expression over global parameters is kept as text, so the
+  joint stays bound to those parameters.
+- Inside loops and functions, values are evaluated, and a shape name refers to
+  the shape created in the same iteration.
+
+`CodeRunner` (given `getScene`) replaces the scene's joints inside the code
+run's `ReplaceSceneCommand` and reports joints that do not resolve. Canvas
+→ code emits `join` / `ground` lines (`joints/jointCode.js`).
+`joints/jointBlocks.js` generates one Blockly block per joint type from its
+params schema, plus a `ground` block, in a "Joints" toolbox category, in both
+directions.
+
+**Examples.** The left panel's *Examples* tab (`ui/ExamplesPanel.js`) shows
+one card per program in `src/examples/jointExamples.js`: open box, shelf,
+stool, splice and hinge, egg-crate loop, and "mistakes on purpose". Opening a
+card loads it into the Code tab, runs it and switches to that tab. Your own
+code is replaced only after a confirmation. `tests/unit/examples.test.js` checks that every example
+runs, that all but the last are free of joint errors and warnings, and that
+the last shows exactly its intended problems.
+
+The legacy single-sided `edgeJoinery` (edge menu) still works unchanged.
+
+**Persistence:** `Serializer.VERSION` is 3.0.0. Tabs carry `joints` (and
+`ground`) only when there are any. The 2.0.0 → 3.0.0 migration is a version
+stamp, and the byte fixture `scene-v3.json` differs from `scene-v2.json` only
+in that line.
 
 ---
 
