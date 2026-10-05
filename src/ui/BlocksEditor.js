@@ -224,6 +224,20 @@ export class BlocksEditor extends Component {
     }
     
     /**
+     * Stop / resume adding and removing blocks for canvas shape changes.
+     * Used while the code editor runs a program: the blocks are rebuilt
+     * from that program instead, and per-shape blocks would otherwise be
+     * turned back into (empty) code that overwrites it.
+     */
+    suspendCanvasSync() {
+        this._suppressShapeEvents = true;
+    }
+
+    resumeCanvasSync() {
+        this._suppressShapeEvents = false;
+    }
+
+    /**
      * Sync blocks workspace with selected shape from canvas
      * Canvas → Blocks direction
      */
@@ -724,7 +738,15 @@ export class BlocksEditor extends Component {
 
         this._workspaceChangeHandler = (event) => {
             if (this._suppressWorkspaceEvents) return;
-            if (event.type === window.Blockly.Events.UI) return;
+            // UI-only events (selection, scrolling, resizing) must never
+            // regenerate the code; Blockly 13 marks them with isUiEvent.
+            if (event.isUiEvent || event.type === window.Blockly.Events.UI) return;
+            // A move that only changes a block's position (Blockly bumping
+            // blocks apart, the user dragging a stack around) changes no code;
+            // only moves that connect or disconnect a block do.
+            if (event.type === window.Blockly.Events.BLOCK_MOVE
+                && event.oldParentId === event.newParentId
+                && event.oldInputName === event.newInputName) return;
 
             const code = this.blocksToCode(this.workspace.getTopBlocks(true));
             if (this._codeChangeHandler) {

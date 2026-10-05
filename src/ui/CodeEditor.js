@@ -453,8 +453,14 @@ export class CodeEditor extends Component {
 
             // Avoid scene->code feedback loops while applying code
             this.isApplyingCode = true;
-            const result = this.codeRunner.run(code, { clearExisting: true });
-            this.isApplyingCode = false;
+            this.runHooks?.before?.();
+            let result;
+            try {
+                result = this.codeRunner.run(code, { clearExisting: true });
+            } finally {
+                this.isApplyingCode = false;
+                this.runHooks?.after?.();
+            }
 
             if (command && result.success) {
                 command.captureAfter(this.context.scene);
@@ -631,6 +637,14 @@ SHORTCUTS
      * @param {string} code
      * @param {{silent?: boolean, source?: string}} options
      */
+    /**
+     * Callbacks around a code run ({before, after}); the editor-sync
+     * mediator uses them to keep the blocks editor out of the run.
+     */
+    setRunHooks(hooks) {
+        this.runHooks = hooks;
+    }
+
     setCode(code, { silent = false, source = 'external' } = {}) {
         if (!this.editor) return;
         const text = String(code ?? '');

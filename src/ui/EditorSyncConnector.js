@@ -21,6 +21,13 @@ export class EditorSyncConnector {
         if (this._connected) return;
         this._connected = true;
 
+        // While code runs, the shapes it creates must not become per-shape
+        // blocks: the blocks are rebuilt from the program afterwards.
+        this.codeEditor?.setRunHooks?.({
+            before: () => this.blocksEditor?.suspendCanvasSync?.(),
+            after: () => this.blocksEditor?.resumeCanvasSync?.()
+        });
+
         if (this.blocksEditor?.setCodeChangeHandler) {
             this.blocksEditor.setCodeChangeHandler((code) => {
                 if (this._suppressCode) return;
