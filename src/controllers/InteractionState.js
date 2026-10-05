@@ -37,6 +37,10 @@ export class InteractionState {
      * tool needs a clean slate. Settings (grid, snap) are preserved.
      */
     reset() {
+        // ── Join tool: first clicked port and the port under the cursor ─
+        this.jointToolFirst = null;
+        this.jointToolHover = null;
+
         // ── Dragging (viewport pan or shape move) ───────────────────────
         this.isDragging = false;
         this.dragStart = null;

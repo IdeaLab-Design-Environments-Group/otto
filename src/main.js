@@ -11,6 +11,7 @@
 // Main entry point - Initialize Application
 import { Application } from './core/Application.js';
 import * as Geometry from './geometry/index.js';
+import EventBus, { EVENTS } from './events/EventBus.js';
 
 /**
  * Global application instance
@@ -166,6 +167,19 @@ function setupToolbarButtons(app) {
             if (app.canvasInput) {
                 app.canvasInput.setToolMode('select');
             }
+        });
+    }
+
+    // Join tool button (also the J key): click two ports to join two shapes.
+    const btnJoint = document.getElementById('btn-joint-tool');
+    if (btnJoint && app.canvasInput) {
+        btnJoint.addEventListener('click', () => {
+            const active = app.interaction?.toolMode === 'joint';
+            app.canvasInput.setToolMode(active ? 'select' : 'joint');
+        });
+        EventBus.subscribe(EVENTS.TOOL_CHANGED, ({ mode }) => {
+            btnJoint.classList.toggle('active', mode === 'joint');
+            btnJoint.setAttribute('aria-pressed', String(mode === 'joint'));
         });
     }
 

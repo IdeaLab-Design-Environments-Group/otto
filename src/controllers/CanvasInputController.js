@@ -21,6 +21,7 @@
  *
  * @module controllers/CanvasInputController
  */
+import { JointToolController } from './JointToolController.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { LiteralBinding } from '../models/Binding.js';
 import { NoSnap, GridSnap } from '../core/SnapStrategy.js';
@@ -302,6 +303,12 @@ export class CanvasInputController {
     onMouseDown(e) {
         const { x, y } = this.eventPoint(e);
         const ix = this.interaction;
+
+        if (e.button === 0 && ix.toolMode === 'joint') {
+            this.jointTool.onClick(x, y, e.clientX, e.clientY);
+            e.preventDefault();
+            return;
+        }
 
         // Path drawing tool (open path)
         if (e.button === 0 && ix.toolMode === 'path') {
@@ -616,6 +623,11 @@ export class CanvasInputController {
     onMouseMove(e) {
         const { x, y } = this.eventPoint(e);
         const ix = this.interaction;
+
+        if (ix.toolMode === 'joint' && !ix.isDragging) {
+            this.jointTool.onHover(x, y);
+            return;
+        }
 
         // Update edge hover in edge selection mode
         this.updateEdgeHover(x, y);
@@ -1260,18 +1272,20 @@ export class CanvasInputController {
 
     /**
      * Set the active tool.
-     * @param {'select'|'path'} mode
+     * @param {'select'|'path'|'joint'} mode
      */
     setToolMode(mode) {
         const ix = this.interaction;
         ix.toolMode = mode;
-        if (mode === 'path') {
+        if (mode === 'path' || mode === 'joint') {
             ix.isSelecting = false;
             ix.isDragging = false;
             this.view.canvas.style.cursor = 'crosshair';
         } else {
-            this.resetPathDrawState();
+            this.view.canvas.style.cursor = 'default';
         }
+        if (mode !== 'path') this.resetPathDrawState();
+        if (mode !== 'joint') this.jointTool?.cancel();
         EventBus.emit(EVENTS.TOOL_CHANGED, { mode });
     }
 

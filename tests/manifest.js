@@ -22,5 +22,6 @@ export const TEST_MODULES = [
     './unit/mat4.test.js',
     './unit/joint-solver.test.js',
     './unit/joint-types.test.js',
-    './unit/mesh-specs.test.js'
+    './unit/mesh-specs.test.js',
+    './unit/joint-tool.test.js'
 ];

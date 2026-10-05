@@ -78,6 +78,18 @@ export class KeyboardShortcutController {
 
         const shapeStore = this.context.shapeStore;
 
+        // 'J' key: toggle the Join tool; Escape leaves it (cancelling a pick first)
+        if ((e.key === 'j' || e.key === 'J') && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            this.input.setToolMode(ix.toolMode === 'joint' ? 'select' : 'joint');
+            return;
+        }
+        if (e.key === 'Escape' && ix.toolMode === 'joint') {
+            if (ix.jointToolFirst || this.input.jointTool.popover) this.input.jointTool.cancel();
+            else this.input.setToolMode('select');
+            return;
+        }
+
         // 'E' key: toggle edge selection mode
         if (e.key === 'e' || e.key === 'E') {
             e.preventDefault();

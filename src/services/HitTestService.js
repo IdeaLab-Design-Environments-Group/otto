@@ -78,13 +78,13 @@ export class HitTestService {
      * @param {number} y - Screen Y coordinate
      * @returns {{edge: import('../geometry/edge/index.js').Edge, position: import('../geometry/Vec.js').Vec, distance: number}|null}
      */
-    hitTestEdge(x, y) {
+    hitTestEdge(x, y, { allShapes = false } = {}) {
         const worldPos = this.vc.screenToWorld(x, y);
         const shapeStore = this.context.shapeStore;
 
         // Get edges from selected shapes (or all shapes if none selected)
         let edges = [];
-        if (this.context.selection.selectedShapeIds.size > 0) {
+        if (!allShapes && this.context.selection.selectedShapeIds.size > 0) {
             edges = shapeStore.getEdgesForSelectedShapes();
         } else if (shapeStore.getEdgesForAllShapes) {
             edges = shapeStore.getEdgesForAllShapes();
