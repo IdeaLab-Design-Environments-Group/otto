@@ -1,7 +1,7 @@
 /**
  * Main Entry Point
  *
- * This is the application bootstrap file that initializes the entire Nova Otto
+ * This is the application bootstrap file that initializes the entire Otto
  * parametric 2D design system. It sets up the Application instance, connects
  * UI components, and exposes global APIs for plugins and console usage.
  *
@@ -33,7 +33,7 @@ let app;
  * - Global window exports for console/plugin access
  */
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Nova Otto - Parametric 2D Design System');
+    console.log('Otto');
 
     try {
         // Create and initialize application (Phase 9)

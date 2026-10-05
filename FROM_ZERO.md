@@ -95,7 +95,7 @@ Then open:
 
 ### What “success” looks like
 
-- DevTools console prints “Nova Otto - Parametric 2D Design System”
+- DevTools console prints “Otto”
 - You can drag a shape from the left library onto the canvas
 - Autosave works (refresh restores your work)
 
