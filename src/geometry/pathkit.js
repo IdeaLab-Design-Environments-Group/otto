@@ -210,11 +210,13 @@ export const fromPkCommands = (pkCommands, scale = 1) => {
 // =============================================================================
 
 let numPkObjects = 0;
-setInterval(() => {
+const leakMonitor = setInterval(() => {
     if (numPkObjects !== 0) {
         console.warn('PathKit memory leak', numPkObjects);
     }
 }, 1000);
+// Under Node (tests) the monitor must not keep the process alive.
+leakMonitor?.unref?.();
 
 export const emptyPkPath = () => {
     numPkObjects++;
