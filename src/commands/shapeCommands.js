@@ -68,6 +68,7 @@ export class RemoveShapesCommand extends Command {
         super(`Delete ${shapeIds.length} shape(s)`);
         this.shapeIds = shapeIds;
         this.removed = null;      // [{json, joinery: [[key, value]]}]
+        this.joints = null;       // joint store before removal (joints cascade)
         this.storeOrder = null;   // full id order before removal
         this.selectionIds = null; // selection before removal
     }
@@ -88,10 +89,23 @@ export class RemoveShapesCommand extends Command {
             store.remove(id);
         });
         store.clearSelection();
+
+        // Joints that touch a removed shape go with it (restored on undo).
+        this.joints = null;
+        const joints = scene.jointStore;
+        if (joints) {
+            const gone = joints.getAll().filter(j => this.shapeIds.includes(j.a.shape) || this.shapeIds.includes(j.b.shape));
+            if (gone.length > 0 || this.shapeIds.includes(joints.ground)) {
+                this.joints = joints.toJSON();
+                gone.forEach(j => joints.remove(j.id));
+                if (this.shapeIds.includes(joints.ground)) joints.setGround(null);
+            }
+        }
     }
 
     undo(scene) {
         const store = scene.shapeStore;
+        if (this.joints) scene.jointStore.fromJSON(this.joints);
         this.removed.forEach(({ json, joinery }) => {
             store.add(ShapeRegistry.fromJSON(json));
             joinery.forEach(([key, value]) => {

@@ -3,6 +3,8 @@
  * Bidirectional connection: Blocks → Canvas (create shapes)
  *                          Canvas → Blocks (add blocks for new shapes)
  */
+import { jointTypes } from '../joints/JointRegistry.js';
+import { jointBlockType, jointBlockJson, jointBlockCode, groundBlockJson, jointsToolboxXml, GROUND_BLOCK, exprSourceText } from '../joints/jointBlocks.js';
 import { Component } from './Component.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { CodeRunner } from '../programming/CodeRunner.js';
@@ -123,7 +125,7 @@ export class BlocksEditor extends Component {
          * @type {?import('../core/SceneContext.js').SceneContext}
          */
         this.context = context;
-        this.codeRunner = new CodeRunner({ shapeStore, parameterStore });
+        this.codeRunner = new CodeRunner({ shapeStore, parameterStore, getScene: () => this.context?.scene });
         this.workspace = null;
         this._blocksDefined = false;
         this._resizeHandler = null;
@@ -523,6 +525,27 @@ export class BlocksEditor extends Component {
             JS.forBlock[blockType] = JS[blockType];
         });
 
+        // Joints: one block per registered joint type, plus `ground`.
+        for (const type of jointTypes.list()) {
+            const blockType = jointBlockType(type.id);
+            Blockly.defineBlocksWithJsonArray([jointBlockJson(type)]);
+            JS[blockType] = blk => jointBlockCode({
+                type: type.id,
+                aShape: blk.getFieldValue('A_SHAPE').trim(),
+                aEdge: blk.getFieldValue('A_EDGE').trim(),
+                bShape: blk.getFieldValue('B_SHAPE').trim(),
+                bEdge: blk.getFieldValue('B_EDGE').trim(),
+                params: Object.fromEntries(Object.entries(type.params).map(([name, spec]) => [
+                    name,
+                    spec.type === 'enum'
+                        ? blk.getFieldValue(`P_${name}`)
+                        : JS.valueToCode(blk, `P_${name}`, JS.ORDER_NONE)
+                ]))
+            });
+        }
+        Blockly.defineBlocksWithJsonArray([groundBlockJson()]);
+        JS[GROUND_BLOCK] = blk => `ground ${blk.getFieldValue('SHAPE').trim()}\n`;
+
         ['union', 'intersection', 'difference'].forEach(kw => {
             Blockly.defineBlocksWithJsonArray([{
                 type: `aqui_${kw}`,
@@ -706,7 +729,7 @@ export class BlocksEditor extends Component {
     }
 
     getToolboxConfig() {
-        return TOOLBOX_XML;
+        return TOOLBOX_XML.replace('</xml>', `${jointsToolboxXml()}</xml>`);
     }
 
     parseCodeToAst(code) {
@@ -1001,6 +1024,48 @@ export class BlocksEditor extends Component {
             });
 
             blk.initSvg(); blk.render();
+            return blk;
+        }
+
+        if (stmt.type === 'join') {
+            const type = jointTypes.get(stmt.jointType);
+            const blockType = jointBlockType(stmt.jointType);
+            if (!type || !window.Blockly.Blocks?.[blockType]) return null;
+            const blk = ws.newBlock(blockType);
+            // Edge fields carry the whole port: `left`, `left.inset(120)`, `line(…)`.
+            const exprText = exprSourceText;
+            const portText = (ref) => (ref.line
+                ? `line(${ref.line.map(exprText).join(', ')})`
+                : ref.at ? `${ref.edge}.at(${exprText(ref.at)})`
+                    : ref.inset ? `${ref.edge}.inset(${exprText(ref.inset)})` : ref.edge);
+            blk.setFieldValue(stmt.a.shape, 'A_SHAPE');
+            blk.setFieldValue(portText(stmt.a), 'A_EDGE');
+            blk.setFieldValue(stmt.b.shape, 'B_SHAPE');
+            blk.setFieldValue(portText(stmt.b), 'B_EDGE');
+            for (const [name, expr] of Object.entries(stmt.params || {})) {
+                const spec = type.params[name];
+                if (!spec) continue;
+                if (spec.type === 'enum') {
+                    const word = expr.type === 'identifier' ? expr.name : String(expr.value);
+                    if (spec.values.map(String).includes(word)) blk.setFieldValue(word, `P_${name}`);
+                    continue;
+                }
+                const child = this.exprToBlock(expr, ws);
+                const input = blk.getInput(`P_${name}`);
+                if (child && input?.connection && child.outputConnection) {
+                    input.connection.connect(child.outputConnection);
+                }
+            }
+            blk.initSvg();
+            blk.render();
+            return blk;
+        }
+
+        if (stmt.type === 'ground') {
+            const blk = ws.newBlock(GROUND_BLOCK);
+            blk.setFieldValue(stmt.shape, 'SHAPE');
+            blk.initSvg();
+            blk.render();
             return blk;
         }
 

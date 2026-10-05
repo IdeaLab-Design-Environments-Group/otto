@@ -29,6 +29,7 @@ import { ParameterStore } from './ParameterStore.js';
 import { ShapeStore } from './ShapeStore.js';
 import { BindingResolver } from './BindingResolver.js';
 import { ExpressionParser } from '../models/ExpressionParser.js';
+import { JointStore } from './JointStore.js';
 
 /**
  * Originator in the Memento Pattern.  Owns every piece of mutable state
@@ -71,6 +72,11 @@ export class SceneState {
          * @type {ShapeStore}
          */
         this.shapeStore = new ShapeStore(this.parameterStore, this.bindingResolver);
+        /**
+         * Two-sided joints between shapes (finger, tab and slot, …).
+         * @type {JointStore}
+         */
+        this.jointStore = new JointStore();
         /**
          * The current pan and zoom state of the canvas viewport.  {@code x}
          * and {@code y} are the world-space coordinates of the top-left

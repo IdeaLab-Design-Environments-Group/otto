@@ -59,13 +59,13 @@ test('getResolvedSorted orders by z (insertion order tiebreak)', () => {
     assertDeepEqual(order, [a.id, c.id, b.id]);
 });
 
-test('migrate: 1.0.0 payload bumps to 2.0.0 and is idempotent', () => {
+test('migrate: 1.0.0 payload chains to the current version and is idempotent', () => {
     const v1 = { version: '1.0.0', activeTab: 't', tabs: [{ id: 't', name: 'S', shapes: [{ id: 'C 1', type: 'circle' }] }] };
     const migrated = migrate(v1);
-    assertEqual(migrated.version, '2.0.0');
+    assertEqual(migrated.version, '3.0.0');
     // Idempotent: running again is a no-op.
     const again = migrate(migrated);
-    assertEqual(again.version, '2.0.0');
+    assertEqual(again.version, '3.0.0');
 });
 
 test('migrate: pre-2.0.0 per-shape thickness (geometry) is left untouched', () => {

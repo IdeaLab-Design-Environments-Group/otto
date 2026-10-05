@@ -11,6 +11,7 @@
 import { AddShapeCommand, RemoveShapesCommand, DuplicateShapesCommand, MutateShapesCommand, SetBindingCommand, SetShapePropertyCommand } from './shapeCommands.js';
 import { AddParameterCommand, RemoveParameterCommand, SetParameterValueCommand, UpdateParameterMetaCommand } from './parameterCommands.js';
 import { SetEdgeJoineryCommand, ReplaceSceneCommand } from './sceneCommands.js';
+import { JOINT_COMMANDS } from './jointCommands.js';
 
 export class CommandCatalog {
     constructor() {
@@ -32,6 +33,7 @@ export class CommandCatalog {
         this.register('param.updateMeta', (...args) => new UpdateParameterMetaCommand(...args));
         this.register('edge.setJoinery', (...args) => new SetEdgeJoineryCommand(...args));
         this.register('scene.replace', (...args) => new ReplaceSceneCommand(...args));
+        for (const [name, factory, meta] of JOINT_COMMANDS) this.register(name, factory, meta);
     }
 
     /**

@@ -16,5 +16,10 @@ export const TEST_MODULES = [
     './unit/expression-strict.test.js',
     './unit/command-meta.test.js',
     './unit/edges.test.js',
-    './unit/edge-hit-rotation.test.js'
+    './unit/edge-hit-rotation.test.js',
+    './unit/joints.test.js',
+    './unit/aqui-joints.test.js',
+    './unit/mat4.test.js',
+    './unit/joint-solver.test.js',
+    './unit/joint-types.test.js'
 ];

@@ -87,7 +87,8 @@ export class ReplaceSceneCommand extends Command {
             parameters: scene.parameterStore.toJSON().parameters,
             shapes: scene.shapeStore.toJSON().shapes,
             edgeJoinery: scene.shapeStore.toJSON().edgeJoinery,
-            selectedShapeId: scene.shapeStore.selectedShapeId
+            selectedShapeId: scene.shapeStore.selectedShapeId,
+            joints: scene.jointStore ? scene.jointStore.toJSON() : null
         };
     }
 
@@ -95,6 +96,7 @@ export class ReplaceSceneCommand extends Command {
     static async restore(scene, snap) {
         if (!snap) return;
         await scene.parameterStore.fromJSON({ parameters: snap.parameters });
+        scene.jointStore?.fromJSON(snap.joints || null);
         await scene.shapeStore.fromJSON({
             shapes: snap.shapes,
             selectedShapeId: snap.selectedShapeId || null,

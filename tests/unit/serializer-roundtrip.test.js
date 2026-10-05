@@ -18,8 +18,8 @@ import { loadFixtureText } from '../fixture-io.js';
 import { buildFixtureTabManager, FIXTURE_SHAPES } from '../fixtures/scene-fixture.js';
 import { Serializer } from '../../src/persistence/Serializer.js';
 
-test('fixture builder output matches captured scene-v2.json byte-for-byte', async () => {
-    const expected = await loadFixtureText('scene-v2.json');
+test('fixture builder output matches captured scene-v3.json byte-for-byte', async () => {
+    const expected = await loadFixtureText('scene-v3.json');
     const actual = Serializer.serialize(buildFixtureTabManager());
     assertEqual(actual, expected.trimEnd(), 'wire format drifted — existing autosaves would break');
 });
@@ -84,4 +84,33 @@ test('viewport round-trips', async () => {
     const original = buildFixtureTabManager();
     const restored = await Serializer.deserialize(Serializer.serialize(original));
     assertDeepEqual(restored.getActiveScene().viewport, { x: 12, y: -8, zoom: 1.25 });
+});
+
+test('3.0.0 changed nothing for scenes without joints except the version line', async () => {
+    const v2 = (await loadFixtureText('scene-v2.json')).split('\n');
+    const v3 = (await loadFixtureText('scene-v3.json')).split('\n');
+    assertEqual(v2.length, v3.length);
+    const differing = v2.map((line, i) => (line === v3[i] ? null : i)).filter(i => i !== null);
+    assertEqual(differing.join(','), '1');
+});
+
+test('captured v2 fixture migrates (2.0.0 → 3.0.0) and re-serializes as v3', async () => {
+    const tm = await Serializer.deserialize(await loadFixtureText('scene-v2.json'));
+    assertEqual(Serializer.serialize(tm), (await loadFixtureText('scene-v3.json')).trimEnd());
+});
+
+test('joints and ground round-trip; no joints means no joints key', async () => {
+    const tm = buildFixtureTabManager();
+    assert(!Serializer.serialize(tm).includes('"joints"'), 'omitted when empty');
+    const scene = tm.getActiveScene();
+    scene.jointStore.fromJSON({
+        joints: [{ id: 'j1', type: 'finger', a: { shape: 'Rectangle 1', edge: 'top' }, b: { shape: 'Chamferrectangle 1', edge: 'bottom' }, params: { count: 'count' } }],
+        ground: 'Rectangle 1'
+    });
+    const json = Serializer.serialize(tm);
+    const restored = await Serializer.deserialize(json);
+    assertEqual(Serializer.serialize(restored), json);
+    const store = restored.getActiveScene().jointStore;
+    assertEqual(store.get('j1').params.count, 'count');
+    assertEqual(store.ground, 'Rectangle 1');
 });

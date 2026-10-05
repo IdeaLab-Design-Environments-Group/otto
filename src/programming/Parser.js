@@ -775,6 +775,12 @@ export class Parser {
         this.eat('IDENTIFIER');
         if (this.currentToken.type === 'LPAREN') {
           statement = this.parseFunctionCall(name);
+        } else if (name === 'join' && this.currentToken.type === 'IDENTIFIER') {
+          // `join` / `ground` are contextual: only statements when followed
+          // by a name, so existing programs may still use them as names.
+          statement = this.parseJoin();
+        } else if (name === 'ground' && this.currentToken.type === 'IDENTIFIER') {
+          statement = this.parseGround();
         } else {
           this.error(`Unexpected identifier: ${name}`);
         }
@@ -785,6 +791,78 @@ export class Parser {
     }
     
     return statement;
+  }
+
+  // join <type> <shape>.<edge> <shape>.<edge> [{ key: value ... }]
+  parseJoin() {
+    const line = this.currentToken.line;
+    const jointType = this.currentToken.value;
+    this.eat('IDENTIFIER');
+    const a = this.parsePortRef();
+    const b = this.parsePortRef();
+    const params = {};
+    if (this.currentToken.type === 'LBRACE') {
+      this.eat('LBRACE');
+      while (this.currentToken.type !== 'RBRACE') {
+        if (this.currentToken.type === 'COMMA') { this.eat('COMMA'); continue; }
+        const key = this.nameToken('parameter name');
+        this.eat('COLON');
+        params[key] = this.parsePropertyValue();
+      }
+      this.eat('RBRACE');
+    }
+    return { type: 'join', jointType, a, b, params, line };
+  }
+
+  // ground <shape>
+  parseGround() {
+    const shape = this.currentToken.value;
+    this.eat('IDENTIFIER');
+    return { type: 'ground', shape };
+  }
+
+  // Port references (edge names may be words the lexer treats as keywords):
+  //   <shape>.<edge>              <shape>.<edge>.inset(d)
+  //   <shape>.<edge>.at(d)        <shape>.line(x0, y0, x1, y1)
+  parsePortRef() {
+    const shape = this.currentToken.value;
+    this.eat('IDENTIFIER');
+    this.eat('DOT');
+    const edge = this.nameToken('edge name');
+    if (edge === 'line' && this.currentToken.type === 'LPAREN') {
+      return { shape, line: this.parseArgs(4, 'line(x0, y0, x1, y1)') };
+    }
+    if (this.currentToken.type === 'DOT') {
+      this.eat('DOT');
+      const fn = this.nameToken('at or inset');
+      if (fn !== 'at' && fn !== 'inset') this.error(`Expected .at(d) or .inset(d) after ${shape}.${edge}, got .${fn}`);
+      const [d] = this.parseArgs(1, `${fn}(distance)`);
+      return { shape, edge, [fn]: d };
+    }
+    return { shape, edge };
+  }
+
+  // ( expr, expr, ... ) with an exact argument count
+  parseArgs(count, usage) {
+    this.eat('LPAREN');
+    const args = [];
+    while (this.currentToken.type !== 'RPAREN') {
+      if (args.length > 0) this.eat('COMMA');
+      args.push(this.parseExpression());
+    }
+    this.eat('RPAREN');
+    if (args.length !== count) this.error(`Expected ${usage}`);
+    return args;
+  }
+
+  // Consume any word-like token (identifier or keyword) and return its text.
+  nameToken(what) {
+    const token = this.currentToken;
+    if (typeof token.value !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(token.value)) {
+      this.error(`Expected ${what}, got ${token.type}`);
+    }
+    this.eat(token.type);
+    return token.value;
   }
 
   // Enhanced for loop parsing

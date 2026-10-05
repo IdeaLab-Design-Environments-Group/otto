@@ -507,3 +507,135 @@ export class TransformVisitor extends BaseVisitor {
     return target;
   }
 }
+// Join / Ground Visitors — two-sided joints between named shape edges.
+// They do not create geometry; they collect joint records that CodeRunner
+// applies to the scene's JointStore.
+
+const EXPR_FUNCTIONS = new Set(['sin', 'cos', 'sqrt', 'abs', 'min', 'max', 'floor', 'ceil', 'round']);
+const OPERATORS = { plus: '+', minus: '-', multiply: '*', divide: '/' };
+
+export class JoinVisitor extends BaseVisitor {
+  visit(node) {
+    const interp = this.interpreter;
+    const params = {};
+    for (const [key, expr] of Object.entries(node.params)) {
+      params[key] = this.paramValue(expr);
+    }
+    interp.joints.push({
+      type: node.jointType,
+      a: this.portRef(node.a),
+      b: this.portRef(node.b),
+      params
+    });
+    return null;
+  }
+
+  /** Port reference with its offsets as numbers or bound expression text. */
+  portRef(ref) {
+    const out = { shape: this.shapeName(ref.shape) };
+    if (ref.line) {
+      out.line = ref.line.map(e => this.numberOrText(e));
+      return out;
+    }
+    out.edge = ref.edge;
+    if (ref.at) out.at = this.numberOrText(ref.at);
+    if (ref.inset) out.inset = this.numberOrText(ref.inset);
+    return out;
+  }
+
+  numberOrText(expr) {
+    const interp = this.interpreter;
+    const local = interp.currentLoopCounter !== undefined || interp.currentFunctionContext;
+    if (!local && expr.type !== 'number') {
+      const text = this.toText(expr);
+      if (text !== null) return text;
+    }
+    return interp.evaluateExpression(expr);
+  }
+
+  /**
+   * Inside a loop or function, a name refers to the shape created in the
+   * same iteration / call (shapes there are suffixed), if there is one.
+   */
+  shapeName(name) {
+    const interp = this.interpreter;
+    const shapes = interp.env.shapes;
+    if (interp.currentFunctionContext) {
+      const scoped = `${name}_${interp.currentFunctionContext.name}_${interp.currentFunctionContext.callId}`;
+      if (shapes.has(scoped)) return scoped;
+    } else if (interp.currentLoopCounter !== undefined) {
+      const scoped = `${name}_${interp.currentLoopCounter}`;
+      if (shapes.has(scoped)) return scoped;
+    }
+    return name;
+  }
+
+  /**
+   * A joint parameter value: an enum word stays a word; at top level, an
+   * expression over global parameters is kept as text so the joint stays
+   * bound to them; anything else is evaluated to a number now.
+   */
+  paramValue(expr) {
+    const interp = this.interpreter;
+    if (expr.type === 'identifier' && !this.isParameter(expr.name)) return expr.name;
+    if (expr.type === 'string') return expr.value;
+    const local = interp.currentLoopCounter !== undefined || interp.currentFunctionContext;
+    if (!local && expr.type !== 'number') {
+      const text = this.toText(expr);
+      if (text !== null) return text;
+    }
+    return interp.evaluateExpression(expr);
+  }
+
+  isParameter(name) {
+    try {
+      this.interpreter.env.getParameter(name);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * AQUI expression → bindable expression text (minimal parentheses), or
+   * null if it uses something the parameter expression language lacks.
+   */
+  toText(node) {
+    const r = this.toTextPrec(node);
+    return r ? r.text : null;
+  }
+
+  /** @returns {?{text: string, prec: number}} prec: 1 = + −, 2 = * /, 3 = atom */
+  toTextPrec(node) {
+    switch (node.type) {
+      case 'number': return { text: String(node.value), prec: 3 };
+      case 'identifier': return this.isParameter(node.name) ? { text: node.name, prec: 3 } : null;
+      case 'binary_op': {
+        const op = OPERATORS[node.operator];
+        const l = this.toTextPrec(node.left), r = this.toTextPrec(node.right);
+        if (!op || !l || !r) return null;
+        const prec = op === '+' || op === '-' ? 1 : 2;
+        const wrap = (x, right) => (x.prec < prec || (right && x.prec === prec && (op === '-' || op === '/')) ? `(${x.text})` : x.text);
+        return { text: `${wrap(l, false)} ${op} ${wrap(r, true)}`, prec };
+      }
+      case 'unary_op': {
+        const x = this.toTextPrec(node.operand);
+        if (!x || node.operator !== 'minus') return null;
+        return { text: x.prec === 3 ? `-${x.text}` : `-(${x.text})`, prec: 3 };
+      }
+      case 'function_call': {
+        if (!EXPR_FUNCTIONS.has(node.name)) return null;
+        const args = node.arguments.map(a => this.toTextPrec(a));
+        return args.every(Boolean) ? { text: `${node.name}(${args.map(a => a.text).join(', ')})`, prec: 3 } : null;
+      }
+      default: return null;
+    }
+  }
+}
+
+export class GroundVisitor extends BaseVisitor {
+  visit(node) {
+    this.interpreter.ground = new JoinVisitor(this.interpreter).shapeName(node.shape);
+    return null;
+  }
+}

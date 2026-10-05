@@ -24,7 +24,7 @@ export class Serializer {
      * this field and run the appropriate migration before deserializing.
      * @type {string}
      */
-    static VERSION = '2.0.0';
+    static VERSION = '3.0.0';
 
     /**
      * Convert a fully-populated {@link TabManager} into a human-readable
@@ -138,7 +138,7 @@ export class Serializer {
      *   {@code tabs} array of {@link Serializer.serialize}'s output.
      */
     static serializeTab(tab) {
-        return {
+        const data = {
             id: tab.id,
             name: tab.name,
             parameters: tab.sceneState.parameterStore.toJSON().parameters,
@@ -147,6 +147,22 @@ export class Serializer {
             selectedShapeId: tab.sceneState.shapeStore.selectedShapeId,
             viewport: { ...tab.sceneState.viewport }
         };
+        Serializer.writeJoints(data, tab.sceneState);
+        return data;
+    }
+
+    /**
+     * Add the scene's joints to a serialized tab/scene. Omitted when there
+     * are none, so scenes without joints keep their exact wire format.
+     * @private
+     */
+    static writeJoints(data, sceneState) {
+        const store = sceneState.jointStore;
+        if (!store || store.isEmpty()) return;
+        const { joints, ground, fabrication } = store.toJSON();
+        if (joints.length) data.joints = joints;
+        if (ground) data.ground = ground;
+        if (fabrication) data.fabrication = fabrication;
     }
     
     /**
@@ -189,6 +205,10 @@ export class Serializer {
         if (json.viewport) {
             sceneState.viewport = { ...json.viewport };
         }
+
+        if (json.joints || json.ground || json.fabrication) {
+            sceneState.jointStore.fromJSON({ joints: json.joints || [], ground: json.ground || null, fabrication: json.fabrication || null });
+        }
         
         const tab = new Tab(json.id, json.name, sceneState);
         return tab;
@@ -206,13 +226,15 @@ export class Serializer {
      *   edgeJoinery, selectedShapeId, and viewport.
      */
     static serializeSceneState(sceneState) {
-        return {
+        const data = {
             parameters: sceneState.parameterStore.toJSON().parameters,
             shapes: sceneState.shapeStore.toJSON().shapes,
             edgeJoinery: sceneState.shapeStore.toJSON().edgeJoinery,
             selectedShapeId: sceneState.shapeStore.selectedShapeId,
             viewport: { ...sceneState.viewport }
         };
+        Serializer.writeJoints(data, sceneState);
+        return data;
     }
     
     /**
@@ -246,6 +268,10 @@ export class Serializer {
         
         if (json.viewport) {
             sceneState.viewport = { ...json.viewport };
+        }
+
+        if (json.joints || json.ground || json.fabrication) {
+            sceneState.jointStore.fromJSON({ joints: json.joints || [], ground: json.ground || null, fabrication: json.fabrication || null });
         }
         
         return sceneState;

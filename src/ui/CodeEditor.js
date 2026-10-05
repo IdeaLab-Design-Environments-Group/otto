@@ -8,6 +8,7 @@ import { Component } from './Component.js';
 import { CodeRunner } from '../programming/CodeRunner.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { ReplaceSceneCommand } from '../commands/sceneCommands.js';
+import { emitJoints } from '../joints/jointCode.js';
 
 export class CodeEditor extends Component {
     /**
@@ -25,7 +26,7 @@ export class CodeEditor extends Component {
          * @type {?import('../core/SceneContext.js').SceneContext}
          */
         this.context = context;
-        this.codeRunner = new CodeRunner({ shapeStore, parameterStore });
+        this.codeRunner = new CodeRunner({ shapeStore, parameterStore, getScene: () => this.context?.scene });
 
         this.editor = null; // CodeMirror instance
         this.textarea = null; // Fallback textarea instance
@@ -131,7 +132,7 @@ export class CodeEditor extends Component {
                 // key inside a shape/transform block is coloured consistently.
                 { regex: /[A-Za-z_]\w*(?=\s*:)/, token: 'property' },
                 // Language keywords (control flow, transforms, styling, turtle, constraints)
-                { regex: /\b(?:param|shape|layer|transform|add|subtract|rotate|scale|position|if|else|endif|and|or|not|for|from|to|step|in|def|return|union|difference|intersection|draw|forward|backward|right|left|goto|penup|pendown|constraints|coincident|distance|horizontal|vertical|fill|filled|fillcolor|color|stroke|strokecolor|strokewidth|opacity|alpha|transparent|visible|hidden|style|thickness|border|background)\b/i, token: 'keyword' },
+                { regex: /\b(?:param|shape|layer|transform|add|subtract|rotate|scale|position|if|else|endif|and|or|not|for|from|to|step|in|def|return|union|difference|intersection|draw|forward|backward|right|left|goto|penup|pendown|constraints|coincident|distance|join|ground|horizontal|vertical|fill|filled|fillcolor|color|stroke|strokecolor|strokewidth|opacity|alpha|transparent|visible|hidden|style|thickness|border|background)\b/i, token: 'keyword' },
                 // Shape primitives
                 { regex: /\b(?:circle|rectangle|roundedrectangle|chamferrectangle|triangle|ellipse|polygon|star|arc|path|line|arrow|text|donut|spiral|cross|wave|slot|gear)\b/i, token: 'variable-2' },
                 // Named colors
@@ -259,6 +260,7 @@ export class CodeEditor extends Component {
         this.subscribe(EVENTS.PARAM_ADDED, schedule);
         this.subscribe(EVENTS.PARAM_REMOVED, schedule);
         this.subscribe(EVENTS.PARAM_CHANGED, schedule);
+        this.subscribe(EVENTS.JOINTS_CHANGED, schedule);
 
         // Selection -> Code highlight
         this.subscribe(EVENTS.SHAPE_SELECTED, ({ id }) => {
@@ -412,6 +414,17 @@ export class CodeEditor extends Component {
             shapeRanges.set(shape.id, { startLine, endLine });
         }
 
+        // Joints between shapes, named the way the shapes are named above.
+        const jointStore = this.context?.scene?.jointStore;
+        if (jointStore && !jointStore.isEmpty()) {
+            const nameOf = (id) => {
+                const shape = this.shapeStore?.get?.(id);
+                return this.sanitizeIdentifier(id, shape?.type || 'shape');
+            };
+            lines.push(...emitJoints(jointStore, nameOf));
+            lines.push('');
+        }
+
         // Trim trailing blank lines
         while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
         return { code: lines.join('\n'), shapeRanges };
@@ -451,11 +464,17 @@ export class CodeEditor extends Component {
             }
 
             if (result.success) {
+                const problems = [...(result.jointErrors || []), ...(result.jointWarnings || [])];
+                const jointLines = result.jointsCreated
+                    ? `\n  Joints: ${result.jointsCreated}` +
+                      (problems.length ? `\n  ⚠ ${problems.join('\n  ⚠ ')}` : '')
+                    : '';
                 this.showOutput(
                     `✓ Success!\n` +
                     `  Shapes created: ${result.shapesCreated}\n` +
-                    `  Parameters created: ${result.parametersCreated}`,
-                    'success'
+                    `  Parameters created: ${result.parametersCreated}` +
+                    jointLines,
+                    problems.length ? 'warning' : 'success'
                 );
 
                 // Canvas repaints via the SHAPE_ADDED/REMOVED events the run emitted.
@@ -514,6 +533,29 @@ SHAPES
   z: <mm>           elevation off the work plane (default 0)
   e.g.  shape circle c1 { radius: 30 depth: 6 z: 10 }
   depth and z accept parameters
+
+JOINTS (two-sided, cut on both panels)
+  join type portA portB { params }
+  ground base        the panel that lies on the floor in 3D
+
+  Ports:  shape.edge            a straight edge
+          shape.edge.inset(d)   a line on the face, d mm in
+          shape.edge.at(d)      a slot start d mm along the edge
+          shape.line(x0, y0, x1, y1)
+  Edges:  top right bottom left (rectangles), base left right
+          (triangle), side0.. bottom (polygon), e0.. (any shape)
+
+  finger     edge + edge     count fold side align fit
+  tab_slot   edge + face     tabs tab_width lock: none|wedge
+  cross_lap  at + at         depth fit
+  splice     edge + edge     count style: dovetail|knob (same plane)
+  bolt       edge + face     size: M3..M6 count length
+  hinge      edge + edge     fold radius gap slit bridge (one piece)
+
+  join finger base.top wall.bottom { count: 7 fit: loose }
+  join tab_slot shelf.left side.top.inset(150) { lock: wedge }
+  join cross_lap a.top.at(200) b.bottom.at(200)
+  Params accept parameters: count: n * 2 + 1
 
 TRANSFORMS
   transform shapeName {

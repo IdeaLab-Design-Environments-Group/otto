@@ -13,7 +13,9 @@ import {
   DrawVisitor,
   ConstraintsVisitor,
   LayerVisitor,
-  TransformVisitor
+  TransformVisitor,
+  JoinVisitor,
+  GroundVisitor
 } from './InterpreterVisitors.js';
 
 export class Interpreter {
@@ -25,6 +27,10 @@ export class Interpreter {
     this.functionCallCounters = new Map();
     this.turtleDrawer = new TurtleDrawer();
     this.constraints = [];
+    /** Joints declared with `join`, applied by CodeRunner. */
+    this.joints = [];
+    /** Shape named by `ground`. */
+    this.ground = null;
     this.currentFunctionContext = null;
     this.currentLoopCounter = undefined;
     
@@ -40,6 +46,8 @@ export class Interpreter {
       constraints: new ConstraintsVisitor(this),
       layer: new LayerVisitor(this),
       transform: new TransformVisitor(this),
+      join: new JoinVisitor(this),
+      ground: new GroundVisitor(this),
       functionCall: new FunctionVisitor(this) // FunctionVisitor handles both definition and call
     };
     
@@ -58,6 +66,8 @@ export class Interpreter {
       layers: this.env.layers,
       functions: this.functions,
       constraints: this.constraints,
+      joints: this.joints,
+      ground: this.ground,
       result
     };
   }
@@ -97,6 +107,10 @@ export class Interpreter {
         return this.evaluateStyleBlock(node);
       case 'constraints_block':
         return this.visitors.constraints.visit(node);
+      case 'join':
+        return this.visitors.join.visit(node);
+      case 'ground':
+        return this.visitors.ground.visit(node);
       case 'add':
         throw new Error(`'add ${node.shape}' is only valid inside a layer or boolean block`);
       case 'rotate':

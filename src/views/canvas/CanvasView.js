@@ -31,7 +31,7 @@
  *
  * Render order (identical to the old monolith):
  *   clear → GridPass (screen space) → [viewport transform] → ShapesPass →
- *   JoineryPass → SelectionPass → SelectionRectPass → DragPreviewPass →
+ *   JoineryPass → JointsPass → SelectionPass → SelectionRectPass → DragPreviewPass →
  *   PathDrawPass → HandleEditPass → [restore]
  *
  * @module views/canvas/CanvasView
@@ -41,6 +41,7 @@ import { EVENTS } from '../../events/EventBus.js';
 import { GridPass } from './passes/GridPass.js';
 import { ShapesPass } from './passes/ShapesPass.js';
 import { JoineryPass } from './passes/JoineryPass.js';
+import { JointsPass } from './passes/JointsPass.js';
 import { SelectionPass } from './passes/SelectionPass.js';
 import { SelectionRectPass } from './passes/SelectionRectPass.js';
 import { DragPreviewPass } from './passes/DragPreviewPass.js';
@@ -71,6 +72,7 @@ export class CanvasView extends Component {
             grid: new GridPass(),
             shapes: new ShapesPass(),
             joinery: new JoineryPass(),
+            joints: new JointsPass(),
             selection: new SelectionPass(),
             selectionRect: new SelectionRectPass(),
             dragPreview: new DragPreviewPass(),
@@ -106,6 +108,7 @@ export class CanvasView extends Component {
         this.subscribe(EVENTS.EDGE_SELECTED, repaint);
         this.subscribe(EVENTS.EDGE_HOVERED, repaint);
         this.subscribe(EVENTS.EDGE_JOINERY_CHANGED, repaint);
+        this.subscribe(EVENTS.JOINTS_CHANGED, repaint);
         this.subscribe(EVENTS.SHAPE_HOVERED, repaint);
         this.subscribe(EVENTS.VIEWPORT_CHANGED, repaint);
         this.subscribe(EVENTS.SELECTION_MODE_CHANGED, (payload) => {
@@ -214,6 +217,7 @@ export class CanvasView extends Component {
 
         this.passes.shapes.render(frame);
         this.passes.joinery.render(frame);
+        this.passes.joints.render(frame);
         this.passes.selection.render(frame);
         this.passes.selectionRect.render(frame);
         this.passes.dragPreview.render(frame);

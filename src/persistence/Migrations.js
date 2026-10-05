@@ -32,6 +32,17 @@ export const MIGRATIONS = {
     '1.0.0': (data) => {
         data.version = '2.0.0';
         return data;
+    },
+
+    /**
+     * 2.0.0 → 3.0.0: two-sided joints. A tab MAY carry `joints` (and a
+     * `ground` shape id); a 2.0.0 scene has none, and missing means empty, so
+     * this step is a pure version stamp. Single-sided `edgeJoinery` is kept
+     * as-is (it does not name a mating edge, so it cannot become a joint).
+     */
+    '2.0.0': (data) => {
+        data.version = '3.0.0';
+        return data;
     }
 };
 

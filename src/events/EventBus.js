@@ -164,7 +164,9 @@ class EventBus {
         // Canvas tool state
         TOOL_CHANGED: 'TOOL_CHANGED',
         // Command history state (undo/redo availability)
-        HISTORY_CHANGED: 'HISTORY_CHANGED'
+        HISTORY_CHANGED: 'HISTORY_CHANGED',
+        // Joints between shapes changed: {kind, revision}
+        JOINTS_CHANGED: 'JOINTS_CHANGED'
     };
 
     /**

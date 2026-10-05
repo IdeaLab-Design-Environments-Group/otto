@@ -9,6 +9,7 @@ import { Parser } from './Parser.js';
 import { Interpreter } from './Interpreter.js';
 import { ShapeRegistry } from '../models/shapes/ShapeRegistry.js';
 import { ParameterBuilder } from '../models/Parameter.js';
+import { resolveJoints } from '../joints/JointService.js';
 
 export class CodeRunner {
     /**
@@ -16,9 +17,11 @@ export class CodeRunner {
      * @param {import('../core/ShapeStore.js').ShapeStore} options.shapeStore
      * @param {import('../core/ParameterStore.js').ParameterStore} options.parameterStore
      */
-    constructor({ shapeStore, parameterStore }) {
+    constructor({ shapeStore, parameterStore, getScene = null }) {
         this.shapeStore = shapeStore;
         this.parameterStore = parameterStore;
+        /** Optional () => SceneState; needed to apply `join` / `ground`. */
+        this.getScene = getScene;
         this.interpreter = new Interpreter();
         this.lastResult = null;
     }
@@ -93,11 +96,16 @@ export class CodeRunner {
                 }
             }
 
+            const { errors: jointErrors, warnings: jointWarnings } = this._applyJoints(result, { clearExisting: clearShapes });
+
             return {
                 success: true,
                 result,
                 shapesCreated: result.shapes ? result.shapes.size : 0,
-                parametersCreated: result.parameters ? result.parameters.size : 0
+                parametersCreated: result.parameters ? result.parameters.size : 0,
+                jointsCreated: result.joints ? result.joints.length : 0,
+                jointErrors,
+                jointWarnings
             };
 
         } catch (error) {
@@ -109,6 +117,39 @@ export class CodeRunner {
                 column: error.column
             };
         }
+    }
+
+    /**
+     * Replace the scene's joints with the ones the code declared (when the
+     * run replaces the scene) and report joint problems as messages. The
+     * caller's ReplaceSceneCommand makes this part of the same undo step.
+     * @private
+     * @returns {{errors: string[], warnings: string[]}} joint problems
+     *   (errors: joints that do not resolve; warnings: e.g. loops that do not close)
+     */
+    _applyJoints(result, { clearExisting }) {
+        const scene = this.getScene?.();
+        const none = { errors: [], warnings: [] };
+        if (!scene?.jointStore) return none;
+        const declared = result.joints || [];
+        if (!clearExisting && declared.length === 0 && !result.ground) return none;
+        const kept = clearExisting ? [] : scene.jointStore.getAll().map(j => structuredClone(j));
+        const joints = [...kept];
+        let n = 1;
+        const nextId = () => {
+            while (joints.some(j => j.id === `j${n}`)) n++;
+            return `j${n}`;
+        };
+        for (const j of declared) joints.push({ id: nextId(), ...j });
+        scene.jointStore.fromJSON({
+            joints,
+            ground: result.ground ?? (clearExisting ? null : scene.jointStore.ground)
+        });
+        const findings = resolveJoints(scene).findings;
+        return {
+            errors: findings.filter(f => f.severity === 'error').map(f => f.message),
+            warnings: findings.filter(f => f.severity === 'warning').map(f => f.message)
+        };
     }
 
     /**
