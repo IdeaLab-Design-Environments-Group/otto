@@ -23,5 +23,6 @@ export const TEST_MODULES = [
     './unit/joint-solver.test.js',
     './unit/joint-types.test.js',
     './unit/mesh-specs.test.js',
-    './unit/joint-tool.test.js'
+    './unit/joint-tool.test.js',
+    './unit/examples.test.js'
 ];

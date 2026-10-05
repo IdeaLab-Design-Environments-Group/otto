@@ -534,14 +534,24 @@ input:checked + .slider:before {
 .panel-tabs {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 2px;
     border-bottom: 1px solid var(--border-light);
+}
+
+/* Four tabs share the narrow left panel evenly. */
+.panel-tabs .panel-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-left: 2px;
+    padding-right: 2px;
+    font-size: 12px;
+    text-align: center;
 }
 
 .panel-tab {
     /* WCAG 2.5.8: Minimum target size */
     min-height: var(--min-target-size);
-    padding: 10px 16px;
+    padding: 10px 8px;
     background: transparent;
     color: black;
     border: none;
@@ -2181,3 +2191,28 @@ body.dark-theme .canvas-container {
 .joint-inspector__btn:focus-visible { background: var(--sidebar-yellow-hover); }
 .joint-inspector__issue { margin: 3px 0 0; padding: 3px 6px; border-radius: 4px; background: var(--sidebar-yellow); }
 .joint-inspector__issue.is-error { background: rgb(254, 226, 226); color: rgb(153, 27, 27); }
+
+/* ===================== Examples tab ===================== */
+
+.examples__intro { margin: 10px 12px 6px; font-size: 12px; color: var(--text-muted); }
+.examples__list { margin: 0; padding: 0 10px 12px; list-style: none; }
+.examples__item { margin-bottom: 8px; }
+.examples__card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    text-align: left;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.examples__card:hover,
+.examples__card:focus-visible { border-color: var(--nav-blue); background: var(--sidebar-yellow-hover); }
+.examples__title { font-weight: 600; font-size: 13px; }
+.examples__description { font-size: 12px; color: var(--text-muted); }
+.examples__tags { font-size: 11px; color: rgb(180, 83, 9); }

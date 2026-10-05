@@ -9,6 +9,7 @@ import { CodeRunner } from '../programming/CodeRunner.js';
 import EventBus, { EVENTS } from '../events/EventBus.js';
 import { ReplaceSceneCommand } from '../commands/sceneCommands.js';
 import { emitJoints } from '../joints/jointCode.js';
+import { JOINT_EXAMPLES } from '../examples/jointExamples.js';
 
 export class CodeEditor extends Component {
     /**
@@ -643,6 +644,22 @@ SHORTCUTS
      */
     setRunHooks(hooks) {
         this.runHooks = hooks;
+    }
+
+    /**
+     * Put an example in the editor and run it. Unsaved code of your own is
+     * only replaced after a confirmation.
+     * @returns {boolean} true if the example was loaded.
+     */
+    loadExample(example) {
+        const current = this.editor ? this.editor.getValue().trim() : '';
+        const isExample = JOINT_EXAMPLES.some(e => e.code.trim() === current);
+        if (current && !isExample && !window.confirm(`Replace the code in the editor with "${example.title}"?`)) {
+            return false;
+        }
+        this.setCode(example.code);
+        this.runCode();
+        return true;
     }
 
     setCode(code, { silent = false, source = 'external' } = {}) {

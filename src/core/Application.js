@@ -16,6 +16,8 @@ import { BindingRegistry } from '../models/BindingRegistry.js';
 import { LiveRegion } from '../ui/a11y/LiveRegion.js';
 import { CanvasView } from '../views/canvas/CanvasView.js';
 import { Preview3D } from '../views/three/Preview3D.js';
+import { ExamplesPanel } from '../ui/ExamplesPanel.js';
+import { JOINT_EXAMPLES } from '../examples/jointExamples.js';
 import { CanvasInputController } from '../controllers/CanvasInputController.js';
 import { KeyboardShortcutController } from '../controllers/KeyboardShortcutController.js';
 import { ParametersMenu } from '../ui/ParametersMenu.js';
@@ -179,6 +181,20 @@ export class Application {
             viewportController: this.viewportController
         });
         this.zoomControls.mount();
+
+        // Examples tab: opening one loads it into the Code tab, runs it, shows the code.
+        const examplesContainer = document.getElementById('examples-container');
+        if (examplesContainer && this.codeEditor) {
+            this.examplesPanel = new ExamplesPanel(examplesContainer, JOINT_EXAMPLES, {
+                onOpen: (example) => {
+                    if (this.codeEditor.loadExample(example)) {
+                        document.getElementById('tab-code')?.click();
+                        this.zoomControls?.fitToContent();
+                    }
+                }
+            });
+            this.examplesPanel.mount();
+        }
 
         // Read-only 3D preview of the joined parts (three.js loads on first open).
         const preview3dContainer = document.getElementById('preview-3d');
