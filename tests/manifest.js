@@ -26,5 +26,6 @@ export const TEST_MODULES = [
     './unit/joint-tool.test.js',
     './unit/examples.test.js',
     './unit/fabrication.test.js',
-    './unit/jev.test.js'
+    './unit/jev.test.js',
+    './unit/jevGuide.test.js'
 ];
