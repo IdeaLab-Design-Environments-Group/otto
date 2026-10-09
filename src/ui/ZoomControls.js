@@ -193,25 +193,34 @@ export class ZoomControls extends Component {
             maxX = Math.max(maxX, bounds.x + bounds.width);
             maxY = Math.max(maxY, bounds.y + bounds.height);
         });
+        this.fitToBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
+    }
 
-        const width = maxX - minX;
-        const height = maxY - minY;
+    /**
+     * Zoom and pan so a world-space box fills the canvas.
+     * @param {{x: number, y: number, width: number, height: number}} box
+     * @param {{top?: number, right?: number, bottom?: number, left?: number}} [inset]
+     *   Extra screen pixels to keep free on each side (e.g. for overlays).
+     */
+    fitToBounds(box, inset = {}) {
         const padding = 50;
+        const top = padding + (inset.top || 0), bottom = padding + (inset.bottom || 0);
+        const left = padding + (inset.left || 0), right = padding + (inset.right || 0);
 
         const canvasWidth = this.vc.cssWidth || window.innerWidth;
         const canvasHeight = this.vc.cssHeight || window.innerHeight;
 
-        const zoomX = (canvasWidth - padding * 2) / width;
-        const zoomY = (canvasHeight - padding * 2) / height;
-        const targetZoom = Math.min(zoomX, zoomY, 5);
+        const zoomX = (canvasWidth - left - right) / Math.max(box.width, 1);
+        const zoomY = (canvasHeight - top - bottom) / Math.max(box.height, 1);
+        const targetZoom = Math.max(0.01, Math.min(zoomX, zoomY, 5));
 
-        // Center viewport on shapes
-        const centerX = (minX + maxX) / 2;
-        const centerY = (minY + maxY) / 2;
+        // Center the box in the free area
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
 
         this.viewport.zoom = targetZoom;
-        this.viewport.x = canvasWidth / 2 - centerX * targetZoom;
-        this.viewport.y = canvasHeight / 2 - centerY * targetZoom;
+        this.viewport.x = left + (canvasWidth - left - right) / 2 - centerX * targetZoom;
+        this.viewport.y = top + (canvasHeight - top - bottom) / 2 - centerY * targetZoom;
 
         EventBus.emit(EVENTS.VIEWPORT_CHANGED, { viewport: this.viewport });
         this.updateZoomDisplay();
