@@ -2226,3 +2226,191 @@ body.dark-theme .canvas-container {
 .cut-panel__preview { display: block; width: 100%; height: auto; background: #fff; border-bottom: 1px solid var(--border-light); }
 .cut-panel__caption { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px; font-size: 12px; }
 .cut-panel__note { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+
+/* ===================== Jev (build-up guide, on the canvas) ===================== */
+
+.jev-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;        /* the canvas stays usable; only Jev's pieces take clicks */
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 13px;
+    letter-spacing: normal;
+    color: var(--text-dark);
+}
+.jev-overlay > * { pointer-events: auto; }
+.jev-overlay [hidden] { display: none !important; }
+
+/* plan strip */
+.jev-strip {
+    position: absolute;
+    top: 30px;
+    left: 34px;
+    max-width: calc(100% - 68px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 6px 5px 12px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--border-light);
+    border-radius: 999px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+}
+.jev-strip__brand { font-weight: 700; color: var(--nav-blue); white-space: nowrap; }
+.jev-strip__goal { font-weight: 600; white-space: nowrap; }
+.jev-strip__hint { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jev-strip__spacer { flex: 1; min-width: 4px; }
+.jev-steps { display: flex; align-items: center; gap: 0; margin: 0; padding: 0; list-style: none; min-width: 0; overflow: hidden; }
+.jev-step { display: flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--text-muted); font-size: 12px; }
+.jev-step + .jev-step::before { content: ""; width: 14px; height: 1px; margin: 0 6px; background: var(--border-medium); }
+.jev-step__dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--border-medium); background: var(--bg-white); flex: none; }
+.jev-step.is-done { color: var(--text-dark); }
+.jev-step.is-done .jev-step__dot { background: rgb(34, 197, 94); border-color: rgb(34, 197, 94); }
+.jev-step.is-current { color: var(--nav-blue); font-weight: 600; }
+.jev-step.is-current .jev-step__dot { border-color: var(--nav-blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18); }
+
+.jev-check { position: relative; white-space: nowrap; font-size: 12px; }
+.jev-check__ok { color: rgb(21, 128, 61); }
+.jev-check__warn { padding: 2px 8px; color: rgb(146, 64, 14); background: rgb(254, 243, 199); border: 0; border-radius: 999px; font: inherit; cursor: pointer; }
+.jev-pop {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 2;
+    width: 340px;
+    margin: 0;
+    padding: 10px 12px;
+    white-space: normal;
+    background: var(--bg-white);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+.jev-check__list { padding-left: 26px; color: var(--text-dark); line-height: 1.4; }
+.jev-check__list li + li { margin-top: 6px; }
+.jev-menu { width: 260px; display: flex; flex-direction: column; gap: 10px; }
+.jev-menu__row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.jev-menu__select { padding: 4px; font: inherit; color: var(--text-dark); border: 1px solid var(--border-medium); border-radius: 6px; }
+
+/* proposal card, pinned under the ghost */
+.jev-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 340px;
+    max-width: calc(100% - 24px);
+    padding: 10px 12px 12px;
+    background: var(--bg-white);
+    border: 1px solid rgba(37, 99, 235, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+    transition: transform 0.12s ease-out;
+}
+.jev-card__top { display: flex; align-items: center; justify-content: space-between; min-height: 20px; }
+.jev-card__count { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--nav-blue-hover); }
+.jev-card__title { margin: 2px 0 4px; font-size: 15px; font-weight: 700; letter-spacing: normal; }
+.jev-card__why { margin: 0 0 10px; color: rgb(51, 65, 85); line-height: 1.45; }
+.jev-card__problem { margin: 0 0 8px; padding: 6px 8px; font-size: 12px; color: rgb(153, 27, 27); background: rgb(254, 242, 242); border-radius: 6px; }
+.jev-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.jev-card__more { margin-left: auto; }
+.jev-card__steps { margin: 10px 0 0; padding: 8px 8px 8px 24px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5; background: rgb(248, 250, 252); border-radius: 6px; }
+
+/* Jev's line + command bar */
+.jev-dock {
+    position: absolute;
+    left: 34px;
+    bottom: 16px;
+    width: min(640px, calc(100% - 320px));
+    min-width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.jev-line {
+    position: relative;
+    padding: 10px 34px 10px 12px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+}
+.jev-line > .jev-icon { position: absolute; top: 6px; right: 6px; }
+.jev-line__text { margin: 0; line-height: 1.45; white-space: pre-wrap; }
+.jev-line__text.is-muted { color: var(--text-muted); font-style: italic; }
+.jev-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.jev-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 5px 5px 14px;
+    background: var(--bg-white);
+    border: 1.5px solid rgba(37, 99, 235, 0.45);
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.14);
+}
+.jev-bar:focus-within { border-color: var(--nav-blue-hover); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), 0 6px 20px rgba(37, 99, 235, 0.14); }
+.jev-bar__input { flex: 1; min-width: 0; padding: 6px 2px; font: inherit; font-size: 14px; color: var(--text-dark); background: transparent; border: 0; outline: none; }
+
+.jev-pill {
+    position: absolute;
+    left: 34px;
+    bottom: 16px;
+    display: none;
+    padding: 8px 14px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--text-light);
+    background: var(--nav-blue);
+    border: 0;
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(30, 58, 138, 0.3);
+    cursor: pointer;
+}
+.jev-overlay.is-minimized > :not(.jev-pill) { display: none; }
+.jev-overlay.is-minimized > .jev-pill { display: block; }
+
+/* buttons */
+.jev-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 5px 11px;
+    min-height: 28px;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-dark);
+    background: var(--bg-white);
+    border: 1px solid var(--border-medium);
+    border-radius: 999px;
+    cursor: pointer;
+}
+.jev-btn:hover:not(:disabled) { background: rgb(241, 245, 249); }
+.jev-btn:focus-visible, .jev-icon:focus-visible, .jev-link:focus-visible { outline: var(--focus-outline); outline-offset: 2px; }
+.jev-btn:disabled { opacity: 0.5; cursor: default; }
+.jev-btn--primary { font-weight: 600; color: var(--text-light); background: var(--nav-blue-hover); border-color: var(--nav-blue-hover); }
+.jev-btn--primary:hover:not(:disabled) { background: var(--nav-blue); }
+.jev-btn kbd { padding: 0 4px; font: inherit; font-size: 11px; background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+.jev-icon {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    flex: none;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.jev-icon:hover { color: var(--text-dark); background: rgb(241, 245, 249); }
+.jev-link { padding: 0; font: inherit; font-size: 12px; color: var(--nav-blue-hover); background: none; border: 0; cursor: pointer; text-align: left; }
+.jev-link:hover { text-decoration: underline; }
+
+@media (max-width: 900px) {
+    .jev-dock { width: calc(100% - 68px); bottom: 70px; }
+    .jev-steps .jev-step__label { display: none; }
+}

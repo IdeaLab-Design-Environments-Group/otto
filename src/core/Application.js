@@ -24,6 +24,9 @@ import { KeyboardShortcutController } from '../controllers/KeyboardShortcutContr
 import { ParametersMenu } from '../ui/ParametersMenu.js';
 import { PropertiesPanel } from '../ui/PropertiesPanel.js';
 import { CoachPanel } from '../ui/CoachPanel.js';
+import { JevOverlay } from '../ui/JevOverlay.js';
+import { JevSession } from '../jev/JevSession.js';
+import { Guide } from '../jev/guide/Guide.js';
 import { TabBar } from '../ui/TabBar.js';
 import { ZoomControls } from '../ui/ZoomControls.js';
 import { PanelResizer } from '../ui/PanelResizer.js';
@@ -242,6 +245,26 @@ export class Application {
                 getCode: () => this.codeEditor?.editor?.getValue?.() ?? ''
             });
             this.coachPanel.mount();
+        }
+
+        // Jev, the build-up guide, built into the canvas: proposes the design
+        // block by block (panels + joints), drawn as a ghost before anything
+        // changes, applied as one undo step. Rule-based (jev/guide).
+        const jevContainer = document.getElementById('jev-overlay');
+        if (jevContainer) {
+            this.jevSession = new JevSession({
+                context: this.context,
+                guide: new Guide({ getScene: () => this.context.scene })
+            });
+            this.jevOverlay = new JevOverlay(jevContainer, {
+                context: this.context,
+                session: this.jevSession,
+                viewportController: this.viewportController,
+                interaction: this.interaction,
+                requestRender: () => this.canvasView?.requestRender(),
+                fitToBounds: (box, inset) => this.zoomControls?.fitToBounds(box, inset)
+            });
+            this.jevOverlay.mount();
         }
 
         // Initialize DragDropManager (context-based: always drops into the

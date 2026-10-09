@@ -37,6 +37,9 @@ export class InteractionState {
      * tool needs a clean slate. Settings (grid, snap) are preserved.
      */
     reset() {
+        // ── Jev: the ghost of the shown proposal (see JevPreviewPass) ───
+        this.jevPreview = null;
+
         // ── Join tool: first clicked port and the port under the cursor ─
         this.jointToolFirst = null;
         this.jointToolHover = null;
