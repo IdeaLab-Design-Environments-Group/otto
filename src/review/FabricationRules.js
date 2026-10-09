@@ -2,12 +2,10 @@
  * @fileoverview FabricationRules — a deterministic, offline "laser-cutting
  * linter" for an Otto scene summary.
  *
- * The LLM coach is great at open-ended judgement, but some fabrication faults
- * are simple, numeric, and worth catching *instantly and for free* — no API
- * key, no network, no token budget. This module encodes those as pure rules
- * over the scene summary (see {@link module:review/SceneSummary}). It runs on
- * every review and its findings are merged ahead of the LLM's, so a student
- * gets grounded laser-cutting feedback even before adding a Gemini key.
+ * Many fabrication faults are simple and numeric, and worth catching
+ * instantly, offline. This module encodes those as pure rules
+ * over the scene summary (see {@link module:review/SceneSummary}); the
+ * fabrication check (CoachPanel) runs them on every review.
  *
  * Every threshold below is a documented default that a teacher can override
  * via the `options` argument (e.g. a different laser bed, a different material
@@ -128,8 +126,7 @@ export function runFabricationRules(summary, options = {}) {
         ));
     }
 
-    // --- Kerf reminder for any bound/hard slot dimension is left to the LLM,
-    // but a general nudge is cheap and universally useful for laser work.
+    // --- A general kerf nudge: cheap and universally useful for laser work.
     findings.push(finding(
         'info',
         'Remember kerf compensation',

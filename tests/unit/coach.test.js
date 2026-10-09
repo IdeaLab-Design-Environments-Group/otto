@@ -1,13 +1,13 @@
 /**
- * AI Fabrication Coach tests: the pure, network-free halves of the review
- * module — scene summarisation and Gemini-response parsing.
+ * Fabrication check tests: scene summarisation and the laser-cutting rules,
+ * plus the coach's review (rules only, sorted by severity).
  */
 import { test, assert, assertEqual, assertDeepEqual } from '../harness.js';
 import { ShapeRegistry } from '../../src/models/shapes/ShapeRegistry.js';
 import { Parameter } from '../../src/models/Parameter.js';
 import { ParameterBinding, ExpressionBinding } from '../../src/models/Binding.js';
 import { buildSceneSummary, sceneSummaryToText } from '../../src/review/SceneSummary.js';
-import { parseFindings, mergeFindings, SEVERITIES } from '../../src/review/FabricationCoach.js';
+import { SEVERITIES } from '../../src/review/FabricationCoach.js';
 import { runFabricationRules, DEFAULT_LASER } from '../../src/review/FabricationRules.js';
 
 /** Minimal summary builder for precise rule-threshold tests. */
@@ -81,52 +81,6 @@ test('sceneSummaryToText includes params, shapes, and AQUI code', () => {
     assert(text.includes('r = 25 [0..100]'), 'shows parameter with range');
     assert(text.includes('radius=25 (= r)'), 'shows bound property');
     assert(text.includes('AQUI source:'), 'includes code section');
-});
-
-// ---- parseFindings --------------------------------------------------------
-
-test('parseFindings reads the {findings:[...]} envelope', () => {
-    const out = parseFindings({ findings: [
-        { severity: 'warning', title: 'Thin tab', detail: 'x', suggestion: 'y' }
-    ] });
-    assertEqual(out.length, 1);
-    assertEqual(out[0].severity, 'warning');
-    assertEqual(out[0].suggestion, 'y');
-});
-
-test('parseFindings tolerates a bare array', () => {
-    const out = parseFindings([{ title: 'Note', detail: 'ok' }]);
-    assertEqual(out.length, 1);
-    assertEqual(out[0].severity, 'info'); // default when omitted
-});
-
-test('parseFindings drops empty and non-object entries', () => {
-    const out = parseFindings({ findings: [
-        null, 'garbage', {}, { title: '', detail: '' }, { title: 'Keep', detail: 'me' }
-    ] });
-    assertEqual(out.length, 1);
-    assertEqual(out[0].title, 'Keep');
-});
-
-test('parseFindings coerces an unknown severity to info', () => {
-    const out = parseFindings({ findings: [{ severity: 'nonsense', title: 't', detail: 'd' }] });
-    assertEqual(out[0].severity, 'info');
-});
-
-test('parseFindings sorts most-urgent first', () => {
-    const out = parseFindings({ findings: [
-        { severity: 'praise', title: 'a', detail: 'd' },
-        { severity: 'error', title: 'b', detail: 'd' },
-        { severity: 'info', title: 'c', detail: 'd' }
-    ] });
-    assertDeepEqual(out.map(f => f.severity), ['error', 'info', 'praise']);
-    assertEqual(SEVERITIES[0], 'error');
-});
-
-test('parseFindings returns [] for junk input', () => {
-    assertDeepEqual(parseFindings(null), []);
-    assertDeepEqual(parseFindings('nope'), []);
-    assertDeepEqual(parseFindings({}), []);
 });
 
 // ---- runFabricationRules (laser-cutting linter) ---------------------------
@@ -211,15 +165,14 @@ test('rule thresholds are overridable (custom bed size)', () => {
     assertEqual(DEFAULT_LASER.bedWidth, 600);
 });
 
-test('mergeFindings keeps rules ahead of AI within a severity, sorted by severity', () => {
-    const rules = [
-        { severity: 'warning', title: 'rule-warn', detail: '', suggestion: '' },
-        { severity: 'info', title: 'rule-info', detail: '', suggestion: '' }
-    ];
-    const llm = [
-        { severity: 'error', title: 'ai-error', detail: '', suggestion: '' },
-        { severity: 'info', title: 'ai-info', detail: '', suggestion: '' }
-    ];
-    const merged = mergeFindings(rules, llm);
-    assertDeepEqual(titles(merged), ['ai-error', 'rule-warn', 'rule-info', 'ai-info']);
+test('the coach reviews with rules only, most urgent first', async () => {
+    const { FabricationCoach } = await import('../../src/review/FabricationCoach.js');
+    const coach = new FabricationCoach({ laser: { bedWidth: 100, bedHeight: 100 } });
+    const shape = ShapeRegistry.create('rectangle', { x: 0, y: 0 }, { width: 400, height: 300 });
+    const { findings } = await coach.review({ shapes: [shape], parameters: [], code: '' });
+    assert(findings.length > 0);
+    const order = findings.map(f => SEVERITIES.indexOf(f.severity));
+    assertDeepEqual(order, [...order].sort((x, y) => x - y));
+    const empty = await coach.review({ shapes: [], parameters: [], code: '' });
+    assertEqual(empty.findings[0].title, 'Nothing to review yet');
 });

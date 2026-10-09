@@ -1,20 +1,18 @@
 /**
- * @fileoverview CoachPanel — the AI Fabrication Coach as a toolbar flyover.
+ * @fileoverview CoachPanel — the fabrication check as a toolbar flyover.
  *
- * A single "AI" button in the top-right of the toolbar toggles this popover.
+ * A "Check" button in the top-right of the toolbar toggles this popover.
  * When open it gathers the active scene through {@link SceneContext}, runs the
- * deterministic laser-cutting rules plus (when a key is configured) Gemini's
- * open-ended review, and lists the findings. No key is required for the local
- * checks; a BYOK field appears when Gemini is not configured.
+ * deterministic laser-cutting rules and lists the findings.
  *
  * It follows Otto's existing flyover pattern (see EdgeJoineryMenu): a
  * body-appended `role="dialog"` anchored under its trigger, dismissed on
- * click-outside or Escape, with a FocusTrap while open. All model-provided text
- * is written via `textContent`, never innerHTML.
+ * click-outside or Escape, with a FocusTrap while open. Text is written via
+ * `textContent`, never innerHTML.
  */
 import { Component } from './Component.js';
 import { FocusTrap } from './a11y/FocusTrap.js';
-import { createCoach, saveApiKey, loadLlmConfig } from '../review/index.js';
+import { createCoach } from '../review/index.js';
 
 /** Leading glyph per severity, matching the coach's vocabulary. */
 const SEVERITY_ICON = { error: '✕', warning: '⚠', info: 'ℹ', praise: '✓' };
@@ -31,7 +29,7 @@ export class CoachPanel extends Component {
         const root = document.createElement('div');
         root.className = 'coach-flyover';
         root.setAttribute('role', 'dialog');
-        root.setAttribute('aria-label', 'AI Fabrication Coach');
+        root.setAttribute('aria-label', 'Fabrication check');
         root.setAttribute('aria-hidden', 'true');
         // Clicks inside the flyover must not bubble to the document-level
         // dismiss handler that closes it.
@@ -78,7 +76,7 @@ export class CoachPanel extends Component {
         // Header: title + close button.
         const header = this.createElement('div', { class: 'coach-flyover__header' });
         header.appendChild(this.createElement('h3', { class: 'coach-flyover__title' },
-            'AI Fabrication Coach'));
+            'Fabrication check'));
         const closeBtn = this.createElement('button', {
             class: 'coach-flyover__close', type: 'button', 'aria-label': 'Close'
         }, '✕');
@@ -86,13 +84,13 @@ export class CoachPanel extends Component {
         header.appendChild(closeBtn);
         this.container.appendChild(header);
 
-        // Body: run button, results, and (when needed) the key row.
+        // Body: run button and results.
         this.body = this.createElement('div', { class: 'coach-flyover__body' });
         this.container.appendChild(this.body);
 
         const runButton = this.createElement('button', {
             class: 'btn-coach-run', type: 'button', disabled: this.busy
-        }, this.busy ? 'Reviewing…' : 'Review my design');
+        }, this.busy ? 'Checking…' : 'Check my design');
         runButton.addEventListener('click', () => this.runReview());
         this.body.appendChild(runButton);
 
@@ -101,48 +99,6 @@ export class CoachPanel extends Component {
         results.setAttribute('aria-live', 'polite');
         this.body.appendChild(results);
         this.renderResults(results);
-
-        this.renderKeyRow();
-    }
-
-    /** Render the BYOK key row only when no key is configured. */
-    async renderKeyRow() {
-        const config = await loadLlmConfig().catch(() => null);
-        if (!this.body) return; // closed / re-rendered while awaiting
-        const existing = this.body.querySelector('.coach-key-row');
-        if (existing) existing.remove();
-
-        const configured = config && config.apiKey
-            && config.apiKey !== 'YOUR_GEMINI_API_KEY';
-        if (configured) return;
-
-        const row = this.createElement('div', { class: 'coach-key-row' });
-        row.appendChild(this.createElement('label', { class: 'coach-key-label' },
-            'Gemini API key (stored in this browser only):'));
-        const input = this.createElement('input', {
-            type: 'password', class: 'coach-key-input',
-            placeholder: 'Paste your Gemini API key'
-        });
-        const saveBtn = this.createElement('button', {
-            class: 'btn-coach-key', type: 'button'
-        }, 'Save key');
-        saveBtn.addEventListener('click', () => {
-            const key = input.value.trim();
-            if (!key) return;
-            saveApiKey(key);
-            this.coach = null; // force rebuild with the new key
-            this.render();
-        });
-        const help = this.createElement('a', {
-            class: 'coach-key-help',
-            href: 'https://aistudio.google.com/apikey',
-            target: '_blank', rel: 'noopener'
-        }, 'Get a free key');
-
-        row.appendChild(input);
-        row.appendChild(saveBtn);
-        row.appendChild(help);
-        this.body.appendChild(row);
     }
 
     /** Paint the results region for the current state. */
@@ -157,7 +113,7 @@ export class CoachPanel extends Component {
         }
         if (this.state === 'loading') {
             region.appendChild(this.createElement('p', { class: 'coach-hint' },
-                'Asking the coach…'));
+                'Checking…'));
             return;
         }
         if (this.state === 'error') {
@@ -168,7 +124,7 @@ export class CoachPanel extends Component {
         // state === 'findings'
         if (this.findings.length === 0) {
             region.appendChild(this.createElement('p', { class: 'coach-hint' },
-                'No feedback returned.'));
+                'No problems found.'));
             return;
         }
         for (const f of this.findings) region.appendChild(this.renderFinding(f));

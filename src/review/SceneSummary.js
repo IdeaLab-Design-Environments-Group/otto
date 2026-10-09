@@ -1,15 +1,14 @@
 /**
- * @fileoverview Turns an Otto scene into a compact, LLM-friendly description.
+ * @fileoverview Turns an Otto scene into a compact description.
  *
- * The Fabrication Coach needs to reason about a design, but a raw serialized
- * scene (nested JSON, ids, viewport data) is noisy and burns tokens. This
- * module distills the scene into a short structured summary and a plain-text
- * rendering suitable for a prompt.
+ * The fabrication check needs to reason about a design, but a raw serialized
+ * scene (nested JSON, ids, viewport data) is noisy. This module distills the
+ * scene into a short structured summary and a plain-text rendering.
  *
  * It is deliberately **pure and DOM-free**: it takes plain data (resolved
  * shapes, parameters, optional AQUI code) and returns plain data, so it can be
- * unit-tested under Node without a canvas or a network. Prompt framing and the
- * Gemini call live in {@link module:review/FabricationCoach}.
+ * unit-tested under Node without a canvas or a network. The rules that read
+ * it live in {@link module:review/FabricationRules}.
  */
 
 /**

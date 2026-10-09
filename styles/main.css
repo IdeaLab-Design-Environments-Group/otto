@@ -1851,7 +1851,7 @@ body.dark-theme .canvas-container {
 }
 
 /* ========================================
-   AI Fabrication Coach panel
+   Fabrication check panel
    ======================================== */
 
 .btn-coach-run {
@@ -1950,54 +1950,7 @@ body.dark-theme .canvas-container {
     line-height: 1.4;
 }
 
-.coach-key-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-light);
-}
-
-.coach-key-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-
-.coach-key-input {
-    padding: 8px 10px;
-    font-size: 13px;
-    font-family: monospace;
-    border: 1px solid var(--border-light);
-    border-radius: var(--border-radius);
-    background: white;
-}
-
-.btn-coach-key {
-    min-height: var(--min-target-size);
-    padding: 6px;
-    background: var(--accent-orange);
-    color: var(--text-light);
-    border: none;
-    border-radius: var(--border-radius);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.btn-coach-key:hover {
-    background: var(--accent-orange-hover);
-}
-
-.coach-key-help {
-    font-size: 11px;
-    color: var(--link-color);
-}
-
-/* --- AI toolbar button (top-right) + flyover --- */
+/* --- Check toolbar button (top-right) + flyover --- */
 
 .toolbar-btn-ai {
     margin-left: auto; /* push to the far right of the top bar */
