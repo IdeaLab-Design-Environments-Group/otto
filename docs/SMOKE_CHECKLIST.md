@@ -79,6 +79,17 @@ For each item: perform the action, then **undo (Ctrl/Cmd+Z) and redo
 - [ ] Cut files: a part larger than the bed is listed with the usable area and a splice suggestion; the stool example lists M5 bolts and nuts
 - [ ] 3D button: the joined parts appear folded up; orbit with the mouse; a box with a 6 mm too-wide wall shows red parts and two reasons
 
+## Jev (build-up guide, on the canvas)
+- [ ] On load: the plan strip at the top of the canvas and the "Ask Jev" bar at the bottom, with starter chips; no Jev toolbar button
+- [ ] "Build a shelf with 3 boards": the first panel appears as a blue dashed ghost, the card pinned under it; the view fits ghost + card
+- [ ] ⏎ (focus on the canvas) or Apply places the block; Ctrl+Z removes the whole block and un-dots the plan step
+- [ ] Board 1: the ghost shows the board with tabs and the new slots in both sides; Other joint switches to plain tabs, then bolts
+- [ ] Skip moves to the next block; ✕ asks what to change
+- [ ] Build a block by hand (e.g. add the next panel yourself): Jev proposes only the missing joint
+- [ ] Finish a recipe: "All N blocks are in. No problems"; 3D shows it standing up
+- [ ] Clicks on empty canvas still select/pan; typing in the Code tab and pressing ⏎ never applies a block
+- [ ] – hides Jev to a pill; the pill brings it back; ⋯ → policy "Autopilot" builds a stool without asking; Export session log downloads a .jsonl
+
 ## Undo/redo (global)
 - [ ] Undo/redo across a mixed session (create → move → bind → param change →
       code run → delete) behaves predictably at every step

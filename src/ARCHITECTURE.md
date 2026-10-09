@@ -16,6 +16,7 @@ the individual sections for what replaced them.
 2. [Declarative shape schema](#2-declarative-shape-schema)
 3. [Command system and undo](#3-command-system-and-undo)
 4. [2.5D: depth and z](#4-25d-depth-and-z)
+   - [Jev, the build-up guide](#jev-the-build-up-guide)
 5. [Plugins](#5-plugins)
 6. [Accessibility](#6-accessibility)
 7. [EventBus](#7-eventbus)
@@ -552,6 +553,63 @@ The legacy single-sided `edgeJoinery` (edge menu) still works unchanged.
 `ground`) only when there are any. The 2.0.0 → 3.0.0 migration is a version
 stamp, and the byte fixture `scene-v3.json` differs from `scene-v2.json` only
 in that line.
+
+### Jev, the build-up guide
+
+Jev (`src/jev/`) is a rule-based decision agent that builds the design
+with the user, block by block, rather than only commenting on it. It uses
+no language model and no network. A block is
+a Lego step: one or two panels plus the joints that click them onto what is
+already there, and a sentence on why that joint suits that connection.
+
+```
+JevOverlay (ui) ──send / accept / reject──▶ JevSession ──onText / onApplied / onRejected──▶ Guide
+                                            ◀── effects: {say} {plan} {ask} {propose} ──┘
+                                            ▼
+              propose → dryRun on a copy → Policy → shown (Apply / Reject) or auto-applied
+              apply   → jev/actions → the same undoable commands as code, canvas, blocks
+                        (one history batch per proposal = one Ctrl+Z)
+```
+
+- **Never edits directly.** Every change is a proposal. It is dry-run on a
+  serialized copy first, showing new and fixed problems, then applied as one
+  undo step.
+- **Policy** (`jev/policy.js`, a study variable) sets how much Jev may do by
+  itself:
+  - conservative: always asks;
+  - balanced: auto-applies only low-risk fixes;
+  - autopilot: applies anything that adds no problem, but asks before removals.
+- **The guide** (`jev/guide/Guide.js`) decides what comes next. It reads the
+  goal with `goal.js` ("a shelf 80 cm tall with 3 boards"), picks a recipe
+  from `blueprints.js` (box, shelf, stool), sets the plan, and proposes the
+  next block. The session carries out its effects; tests swap in a scripted
+  guide.
+- **Progress comes from the design itself.** A block counts as done when its
+  panels and joints are in the scene, whoever placed them. Joints match by
+  type and ports, in either order. Each proposal contains only what is still
+  missing. `JevSession.syncPlan()` re-ticks the plan on every scene change,
+  so undo un-ticks it.
+- **Rejecting a block** with an offered alternative acts at once (*Other
+  joint* cycles the block's variants, e.g. wedged tabs / plain tabs / bolts;
+  *Skip*). A plain reject asks: skip, other joint, change size (resizes
+  placed panels in one proposal), or stop.
+- **Built into the canvas** (`ui/JevOverlay.js`, no button, no side panel):
+  - a plan strip at the top, with the live design check (problems after
+    every change, Jev's or the user's) and settings (policy, log export);
+  - the **ghost**: `jev/ghost.js` diffs the proposal's dry-run copy against
+    the design, and `JevPreviewPass` draws new panels (with their real teeth
+    and slots), panels that gain cuts, and new joint links, dashed in blue,
+    exactly where Apply will put them;
+  - the proposal card pinned under the ghost: Apply (⏎), the proposal's
+    `alternatives` (one click: e.g. *Other joint*, *Skip*), ✕ to reject;
+  - an "Ask Jev" bar at the bottom with Jev's latest line, questions as
+    chips; it hides to a pill.
+- **SessionLog** records every message, state change, proposal and decision
+  with timings. *Export session log* saves it as JSON lines.
+
+To add a recipe, add one entry to `BLUEPRINTS`. `tests/unit/jevGuide.test.js`
+builds every recipe and every block variant through the session and requires
+zero problems at the end.
 
 ---
 
