@@ -25,5 +25,6 @@ export const TEST_MODULES = [
     './unit/mesh-specs.test.js',
     './unit/joint-tool.test.js',
     './unit/examples.test.js',
-    './unit/fabrication.test.js'
+    './unit/fabrication.test.js',
+    './unit/jev.test.js'
 ];
