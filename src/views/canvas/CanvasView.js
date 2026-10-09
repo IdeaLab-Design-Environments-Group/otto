@@ -160,10 +160,9 @@ export class CanvasView extends Component {
         const rect = this.canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
 
+        // No inline px size: CSS sizes the canvas (100% of its container), so
+        // it can shrink when the side panels take room.
         this.vc.setCanvasSize(rect.width, rect.height);
-
-        this.canvas.style.width = `${rect.width}px`;
-        this.canvas.style.height = `${rect.height}px`;
 
         const newWidth = rect.width * dpr;
         const newHeight = rect.height * dpr;
