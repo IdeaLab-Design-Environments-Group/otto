@@ -1,8 +1,6 @@
-<h2 align="center">Otto: Teaching Parametric Design in Digital Fabrication Education</h2>
+<h2 align="center">Otto: A Multi-Modal Platform for Accessible Parametric Design</h2>
 <p align="center">
-  <picture>
-<img width="400" height="330" alt="Screenshot 2025-10-22 at 08 27 11" src="https://github.com/user-attachments/assets/3e74c99f-4148-467d-b288-0fc239c42a01" />
-  </picture>
+
 </p>
 <p align="center">
   <b>A graphical programming language for parametric design education</b>
